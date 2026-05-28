@@ -785,6 +785,140 @@ Hãy viết báo cáo bằng tiếng Việt, chi tiết, cụ thể và mang tí
       return 'Trò chuyện với AI';
     }
   }
+
+  // ==============================
+  // Lesson Task Grading
+  // ==============================
+
+  async gradeLessonTask(submissionData, rubric, submissionFields) {
+    try {
+      const systemPrompt = `Bạn là một giáo viên chấm bài thực hành chuyên nghiệp. Nhiệm vụ của bạn là đánh giá bài làm của học sinh một cách khách quan, công bằng và xây dựng.
+
+QUY TRÌNH CHẤM ĐIỂM:
+1. Đọc kỹ đề bài (submissionFields) và tiêu chí chấm điểm (rubric)
+2. So sánh bài làm của học sinh (submissionData) với từng tiêu chí
+3. Đánh giá điểm mạnh và điểm cần cải thiện
+4. Tính điểm tổng (thang 100)
+5. Đưa ra nhận xét chi tiết
+
+TIÊU CHÍ CHẤM ĐIỂM (rubric):
+${JSON.stringify(rubric, null, 2)}
+
+ĐỀ BÀI / YÊU CẦU BÀI TẬP (submissionFields):
+${JSON.stringify(submissionFields, null, 2)}
+
+BÀI LÀM CỦA HỌC SINH:
+${JSON.stringify(submissionData, null, 2)}
+
+LƯU Ý QUAN TRỌNG:
+- Nếu bài làm trống hoặc không liên quan đến đề bài → điểm thấp (0-20/100)
+- Nếu đúng ý tưởng nhưng chưa hoàn thiện → 40-70/100
+- Nếu hoàn thiện và đúng → 80-100/100
+- Luôn đưa ra gợi ý cải thiện cụ thể, thực tế
+
+OUTPUT FORMAT (JSON bắt buộc):
+{
+  "score": <điểm số từ 0-100, kiểu Number>,
+  "feedback": "<nhận xét chung ngắn gọn 1-2 câu>",
+  "strengths": ["<điểm mạnh 1>", "<điểm mạnh 2>"],
+  "improvements": ["<điểm cần cải thiện 1>", "<điểm cần cải thiện 2>"]
+}`;
+
+      const response = await groqClient.post('/chat/completions', {
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: `Hãy chấm bài thực hành này và trả về kết quả theo format JSON yêu cầu.\n\nBài làm: ${JSON.stringify(submissionData)}\nRubric: ${JSON.stringify(rubric)}\nSubmission Fields: ${JSON.stringify(submissionFields)}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 2048
+      });
+
+      const rawContent = response.data.choices[0].message.content;
+
+      // Parse JSON response
+      let gradingResult;
+      try {
+        const jsonMatch = rawContent.match(/```json\n?([\s\S]*?)\n?```/) ||
+          rawContent.match(/```\n?([\s\S]*?)\n?```/) ||
+          rawContent.match(/(\{[\s\S]*\})/);
+        const jsonStr = jsonMatch ? jsonMatch[1] : rawContent;
+        gradingResult = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.error('[AIService.gradeLessonTask] JSON parse error:', parseError, 'Raw content:', rawContent);
+        throw new Error('Lỗi parse kết quả chấm điểm từ AI');
+      }
+
+      // Validate required fields
+      if (typeof gradingResult.score !== 'number') {
+        gradingResult.score = 0;
+      }
+      gradingResult.feedback = gradingResult.feedback || 'Không có nhận xét';
+      gradingResult.strengths = Array.isArray(gradingResult.strengths) ? gradingResult.strengths : [];
+      gradingResult.improvements = Array.isArray(gradingResult.improvements) ? gradingResult.improvements : [];
+
+      return gradingResult;
+    } catch (error) {
+      console.error('[AIService.gradeLessonTask] Error:', error);
+      throw error;
+    }
+  }
+
+  // ==============================
+  // Lesson Chat Prompts
+  // ==============================
+
+  buildLessonChatPrompt(lesson, role) {
+    const roleConfig = {
+      MANAGER: {
+        name: 'Quản lý dự án',
+        persona: 'Bạn là một Quản lý dự án (Project Manager) có kinh nghiệm 10+ năm, chuyên quản lý các dự án phần mềm theo phương pháp Agile/Scrum. Bạn có kiến thức sâu về quản lý nhóm, lên kế hoạch, theo dõi tiến độ và giải quyết xung đột.',
+        focus: 'quản lý dự án, sắp xếp công việc, phân chia task, standup meeting, retrospective, đánh giá tiến độ'
+      },
+      TECH_LEAD: {
+        name: 'Kỹ sư trưởng',
+        persona: 'Bạn là một Technical Lead / Senior Software Engineer với 8+ năm kinh nghiệm. Bạn giỏi về kiến trúc hệ thống, code review, thiết kế database, tối ưu hiệu suất và mentoring junior developers.',
+        focus: 'kiến trúc phần mềm, clean code, best practices, design patterns, performance optimization, code review'
+      },
+      HR: {
+        name: 'Chuyên viên nhân sự',
+        persona: 'Bạn là một HR Business Partner với 5+ năm kinh nghiệm trong ngành IT. Bạn hiểu rõ văn hóa doanh nghiệp IT, quy trình tuyển dụng, đánh giá nhân sự và phát triển con người.',
+        focus: 'kỹ năng mềm, phỏng vấn xin việc, cv, thái độ làm việc, teamwork, giao tiếp, văn hóa công ty IT'
+      },
+      QA: {
+        name: 'Kỹ sư QA',
+        persona: 'Bạn là một QA Engineer / Tester chuyên nghiệp với 5+ năm kinh nghiệm. Bạn giỏi viết test case, test plan, phân tích yêu cầu để tìm edge cases, sử dụng các công cụ testing và am hiểu CI/CD.',
+        focus: 'kiểm thử phần mềm, test case, bug report, test strategy, automation testing, CI/CD'
+      }
+    };
+
+    const config = roleConfig[role] || roleConfig.MANAGER;
+
+    return `${config.persona}
+
+VAI TRÒ TRONG BUỔI HỌC: ${config.name}
+CHỦ ĐỀ BÀI HỌC: ${lesson.title || 'Không có tiêu đề'}
+NỘI DUNG LÝ THUYẾT:
+${lesson.theoryContent || 'Không có nội dung lý thuyết'}
+NỘI DUNG BÀI TẬP:
+${lesson.taskDescription || 'Không có nội dung bài tập'}
+
+NHIỆM VỤ CỦA BẠN:
+1. Đóng vai ${config.name} — trao đổi với sinh viên về nội dung bài học dưới góc nhìn ${config.name}
+2. Giải thích các khái niệm liên quan đến bài học từ góc độ ${config.name}
+3. Đưa ra ví dụ thực tế từ kinh nghiệm làm việc
+4. Đặt câu hỏi gợi mở để sinh viên suy nghĩ
+5. Chia sẻ các lưu ý / best practices thường gặp trong thực tế
+
+LƯU Ý:
+- Chỉ trả lời trong phạm vi: ${config.focus}
+- Sử dụng tiếng Việt, thân thiện, gần gũi
+- Nếu câu hỏi ngoài phạm vi: hãy lịch sự chuyển hướng về chủ đề bài học
+- Không tiết lộ thông tin kỹ thuật hệ thống`;
+  }
 }
 
 module.exports = new AIService();

@@ -30,6 +30,9 @@ db.CareerTest = require("./careerTestModel")(sequelize, Sequelize.DataTypes);
 db.Otp = require("./otpModel")(sequelize, Sequelize.DataTypes);
 db.BlogMedia = require("./BlogMediaModel")(sequelize, Sequelize.DataTypes);
 db.ChatSession = require("./chatSessionModel")(sequelize, Sequelize.DataTypes);
+db.CourseSubmission = require("./courseSubmissionModel")(sequelize, Sequelize.DataTypes);
+db.JobPosting = require("./jobPostingModel")(sequelize, Sequelize.DataTypes);
+db.JobApplication = require("./jobApplicationModel")(sequelize, Sequelize.DataTypes);
 
 
 // Setup associations
@@ -38,5 +41,30 @@ Object.keys(db).forEach(modelName => {
     db[modelName].associate(db);
   }
 });
+
+// --- New associations for Course, Job Posting features ---
+// CareerPath (Course) <-> Lesson, CourseSubmission, StudentProgress
+db.CareerPath.hasMany(db.StudentProgress, { foreignKey: 'careerPathId', as: 'progressRecords' });
+db.CareerPath.hasMany(db.CourseSubmission, { foreignKey: 'careerPathId', as: 'submissions' });
+
+// Lesson <-> CareerPath, CourseSubmission
+db.Lesson.hasMany(db.CourseSubmission, { foreignKey: 'lessonId', as: 'submissions' });
+
+// CourseSubmission <-> Student, Lesson, CareerPath
+db.CourseSubmission.belongsTo(db.Student, { foreignKey: 'studentId', as: 'student' });
+db.CourseSubmission.belongsTo(db.Lesson, { foreignKey: 'lessonId', as: 'lesson' });
+db.CourseSubmission.belongsTo(db.CareerPath, { foreignKey: 'careerPathId', as: 'careerPath' });
+
+// Student <-> CourseSubmission, JobApplication
+db.Student.hasMany(db.CourseSubmission, { foreignKey: 'studentId', as: 'courseSubmissions' });
+db.Student.hasMany(db.JobApplication, { foreignKey: 'studentId', as: 'jobApplications' });
+
+// JobPosting <-> Company, JobApplication
+db.JobPosting.belongsTo(db.Company, { foreignKey: 'companyId', as: 'company' });
+db.JobPosting.hasMany(db.JobApplication, { foreignKey: 'jobPostingId', as: 'applications' });
+
+// JobApplication <-> JobPosting, Student
+db.JobApplication.belongsTo(db.JobPosting, { foreignKey: 'jobPostingId', as: 'jobPosting' });
+db.JobApplication.belongsTo(db.Student, { foreignKey: 'studentId', as: 'student' });
 
 module.exports = db;

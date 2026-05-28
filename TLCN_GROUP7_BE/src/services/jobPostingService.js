@@ -1,4 +1,5 @@
 const db = require('../models');
+const aiService = require('./aiService');
 
 class JobPostingService {
 
@@ -349,6 +350,7 @@ class JobPostingService {
   // ==============================
 
   async analyzeSkillGap(studentId, jobPostingId) {
+    // Lấy JobPosting kèm thông tin Company
     const job = await db.JobPosting.findByPk(jobPostingId, {
       include: [{ model: db.Company, as: 'company', attributes: ['id', 'companyName'] }]
     });
@@ -359,33 +361,134 @@ class JobPostingService {
 
     const skillRequirements = job.skillRequirements || [];
 
-    // MOCK DATA — logic AI matching thật sẽ làm ở Phase 4
-    const required = skillRequirements
-      .filter(s => s.level === 'REQUIRED')
-      .map(s => ({
-        skillName: s.skillName,
-        matched: Math.random() > 0.5,
-        proficiency: Math.floor(Math.random() * 5) + 1,
-        minRequired: s.minProficiency || 3
-      }));
+    // =========================================
+    // TRUY VẤN 1: StudentProgress + CareerPath
+    // =========================================
+    const studentProgresses = await db.StudentProgress.findAll({
+      where: { studentId },
+      include: [{ model: db.CareerPath, as: 'careerPath' }]
+    });
 
-    const niceToHave = skillRequirements
-      .filter(s => s.level === 'NICE_TO_HAVE')
-      .map(s => ({
-        skillName: s.skillName,
-        matched: Math.random() > 0.5,
-        proficiency: Math.floor(Math.random() * 5) + 1,
-        minRequired: s.minProficiency || 1
-      }));
+    // =========================================
+    // TRUY VẤN 2: StudentTestResult + Test
+    // =========================================
+    const studentTestResults = await db.StudentTestResult.findAll({
+      where: { studentId },
+      include: [{ model: db.Test, as: 'test' }]
+    });
 
-    const matchedRequired = required.filter(s => s.matched).length;
-    const matchPercentage = required.length > 0
-      ? Math.round((matchedRequired / required.length) * 100)
+    // =========================================
+    // THUẬT TOÁN: Xây Map kỹ năng sinh viên
+    // Format: { [skillNameLower]: { proficiency, courseId } }
+    // =========================================
+    const skillMap = {};
+
+    for (const progress of studentProgresses) {
+      const course = progress.careerPath;
+      if (!course) continue;
+
+      const courseTitle = course.title || '';
+      const courseCategory = course.category || '';
+
+      // Lấy điểm test trung bình của khóa học này
+      // Lọc: test.careerPathId === course.id
+      const courseTests = (studentTestResults || []).filter(
+        tr => tr.test && tr.test.careerPathId === course.id
+      );
+
+      let avgScore = null;
+      if (courseTests.length > 0) {
+        const totalScore = courseTests.reduce((sum, tr) => {
+          let raw = tr.score || 0;
+          if (raw > 10) raw = raw / 10;
+          return sum + raw;
+        }, 0);
+        avgScore = totalScore / courseTests.length;
+      }
+
+      const status = progress.status;
+
+      // Tính proficiency (1–5)
+      let proficiency = 1;
+
+      if (status === 'IN_PROGRESS') {
+        if (avgScore !== null && avgScore >= 6) {
+          proficiency = 3;
+        } else {
+          proficiency = 1;
+        }
+      } else if (status === 'COMPLETED') {
+        if (avgScore !== null && avgScore >= 8.0) {
+          proficiency = 5;
+        } else {
+          proficiency = 4;
+        }
+      } else {
+        // NOT_STARTED — giữ mặc định 1
+        proficiency = 1;
+      }
+
+      // Tách từ khóa từ title và category làm skillName
+      const titleWords = courseTitle.split(/\s+/).filter(w => w.length > 2);
+      const categoryWords = courseCategory.split(/\s+/).filter(w => w.length > 2);
+
+      const allWords = [...titleWords, ...categoryWords];
+      for (const word of allWords) {
+        const key = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!key) continue;
+        if (!skillMap[key] || proficiency > skillMap[key].proficiency) {
+          skillMap[key] = { proficiency, courseId: course.id, courseTitle };
+        }
+      }
+    }
+
+    // =========================================
+    // MATCHING: Duyệt skillRequirements → so sánh
+    // =========================================
+    const requiredResults = [];
+    const niceToHaveResults = [];
+
+    for (const req of skillRequirements) {
+      const jobSkillLower = req.skillName.toLowerCase();
+      let matched = false;
+      let studentProficiency = 0;
+
+      // Tìm khớp: so sánh jobSkillName.includes(skillKey) hoặc skillKey.includes(jobSkillWord)
+      const jobWords = jobSkillLower.split(/\s+/).filter(w => w.length > 2);
+
+      for (const key of Object.keys(skillMap)) {
+        // Kiểm tra: skillKey chứa trong jobSkillName HOẶC jobSkillWord chứa trong skillKey
+        const found = jobWords.some(w => key.includes(w) || w.includes(key));
+        if (found) {
+          matched = true;
+          studentProficiency = skillMap[key].proficiency;
+          break;
+        }
+      }
+
+      const item = {
+        skillName: req.skillName,
+        matched,
+        proficiency: studentProficiency,
+        minRequired: req.minProficiency || 1
+      };
+
+      if (req.level === 'REQUIRED') {
+        requiredResults.push(item);
+      } else {
+        niceToHaveResults.push(item);
+      }
+    }
+
+    // Tính matchPercentage (chỉ tính trên REQUIRED)
+    const matchedRequired = requiredResults.filter(s => s.matched).length;
+    const matchPercentage = requiredResults.length > 0
+      ? Math.round((matchedRequired / requiredResults.length) * 100)
       : 0;
 
     return {
-      required,
-      niceToHave,
+      required: requiredResults,
+      niceToHave: niceToHaveResults,
       matchPercentage
     };
   }

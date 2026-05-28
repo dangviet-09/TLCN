@@ -1,7 +1,7 @@
 const authRouter = require('./authRoute')
 const userRouter = require('./userRoute')
 const blogRouter = require('./blogRoute')
-const careerTestRouter = require('./careerTestRoutes')
+const careerTestRouter = require('./careerTestRoute');
 const challengeTestRouter = require('./challengeTestRoute');
 const studentRouter = require('./studentRoute')
 const commentRouter = require('./commentRoute');
@@ -17,6 +17,7 @@ const searchRouter = require('./searchRoute');
 const followRouter = require('./followRoute');
 const vectorRouter = require('./vectorRoute');
 const courseRouter = require('./courseRoute');
+const jobRouter = require('./jobRoute');
 
 function route(app) {
     // Health check endpoint for Docker
@@ -47,6 +48,7 @@ function route(app) {
     app.use("/follows", followRouter);
     app.use("/vector", vectorRouter);
     app.use("/courses", courseRouter);
+    app.use("/jobs", jobRouter);
 }
 
 module.exports = route;

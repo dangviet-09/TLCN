@@ -264,16 +264,128 @@ OUTPUT FORMAT (JSON):
   }
 
   /**
+   * Grade CareerTest submission (MULTIPLE_CHOICE + SHORT_ANSWER)
+   */
+  async gradeCareerTest(testId, studentId, answers) {
+    try {
+      const careerTest = await db.CareerTest.findByPk(testId);
+      if (!careerTest) throw new Error('Career test không tồn tại');
+
+      const questions = careerTest.questions || [];
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('Career test không có câu hỏi nào');
+      }
+
+      let totalScore = 0;
+      let totalPoints = 0;
+      const details = [];
+
+      for (const question of questions) {
+        const points = question.points || 10;
+        totalPoints += points;
+
+        const studentAnswer = answers.find(a => a.questionIndex === questions.indexOf(question));
+
+        if (!studentAnswer) {
+          details.push({
+            questionIndex: questions.indexOf(question),
+            type: question.type,
+            maxPoints: points,
+            earnedPoints: 0,
+            isCorrect: false,
+            explanation: 'Không có câu trả lời'
+          });
+          continue;
+        }
+
+        let earnedPoints = 0;
+        let isCorrect = false;
+        let explanation = '';
+
+        if (question.type === 'MULTIPLE_CHOICE') {
+          const normalizedCorrect = String(question.correctAnswer).toUpperCase().trim();
+          const normalizedAnswer = String(studentAnswer.answer).toUpperCase().trim();
+          isCorrect = normalizedCorrect === normalizedAnswer;
+          earnedPoints = isCorrect ? points : 0;
+          explanation = isCorrect
+            ? `Đúng. Đáp án: ${question.correctAnswer}`
+            : `Sai. Đáp án đúng: ${question.correctAnswer}, của bạn: ${studentAnswer.answer}`;
+        } else if (question.type === 'SHORT_ANSWER') {
+          const expectedKeywords = question.expectedKeywords || [];
+          if (expectedKeywords.length === 0) {
+            isCorrect = true;
+            earnedPoints = points;
+            explanation = 'Câu trả lời được chấp nhận (không có từ khóa yêu cầu)';
+          } else {
+            const answerLower = String(studentAnswer.answer).toLowerCase();
+            const matchedKeywords = expectedKeywords.filter(keyword =>
+              answerLower.includes(String(keyword).toLowerCase())
+            );
+            const matchRatio = matchedKeywords.length / expectedKeywords.length;
+            earnedPoints = Math.round(matchRatio * points * 100) / 100;
+            isCorrect = matchRatio >= 0.7;
+            explanation = matchRatio >= 0.7
+              ? `Đạt yêu cầu. Đã chứa ${matchedKeywords.length}/${expectedKeywords.length} từ khóa: ${matchedKeywords.join(', ')}`
+              : `Chưa đạt. Cần từ khóa: ${expectedKeywords.join(', ')}. Tìm thấy: ${matchedKeywords.join(', ') || 'không có'}`;
+          }
+        }
+
+        totalScore += earnedPoints;
+
+        details.push({
+          questionIndex: questions.indexOf(question),
+          type: question.type,
+          maxPoints: points,
+          earnedPoints,
+          isCorrect,
+          explanation
+        });
+      }
+
+      const finalScore = totalPoints > 0
+        ? Math.round((totalScore / totalPoints) * 100 * 100) / 100
+        : 0;
+
+      const correctCount = details.filter(d => d.isCorrect).length;
+
+      const feedback = `Kết quả: ${correctCount}/${questions.length} câu đúng. Điểm: ${finalScore}/100.`;
+
+      const failedQuestions = details.filter(d => !d.isCorrect);
+      let suggestions = '';
+      if (failedQuestions.length > 0) {
+        suggestions = `Bạn nên ôn lại ${failedQuestions.length} câu chưa đạt để cải thiện kết quả.`;
+      } else {
+        suggestions = 'Chúc mừng! Bạn đã hoàn thành xuất sắc bài test này.';
+      }
+
+      // TODO: Gợi ý courses cải thiện dựa trên câu hỏi sai qua aiService.searchCourses()
+      // Sẽ được thêm ở Bước 2.7 khi hoàn thiện aiService.searchCourses()
+
+      return {
+        score: finalScore,
+        correctCount,
+        totalQuestions: questions.length,
+        feedback,
+        suggestions,
+        details
+      };
+    } catch (error) {
+      console.error('[TestGradingService.gradeCareerTest] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate detailed feedback based on grading result
    */
   generateDetailedFeedback(gradingResult) {
     const { score, correctCount, totalQuestions, feedback, suggestions } = gradingResult;
-    
+
     let detailedFeedback = `### KẾT QUẢ BÀI KIỂM TRA\n\n`;
     detailedFeedback += `**Tổng điểm:** ${score}/${totalQuestions * 10}\n`;
     detailedFeedback += `**Số câu đúng:** ${correctCount}/${totalQuestions}\n\n`;
     detailedFeedback += `**Nhận xét:** ${feedback}\n\n`;
-    
+
     if (suggestions) {
       detailedFeedback += `**Gợi ý cải thiện:** ${suggestions}\n\n`;
     }

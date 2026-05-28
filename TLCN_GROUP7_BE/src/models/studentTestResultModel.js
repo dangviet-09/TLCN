@@ -38,6 +38,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true,
       comment: 'When the test was completed'
+    },
+    lessonId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'lessons', key: 'id' },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
     }
   }, {
     tableName: 'student_test_results',

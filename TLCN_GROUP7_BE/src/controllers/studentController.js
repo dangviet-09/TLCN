@@ -103,7 +103,7 @@ class StudentController {
         const userId = req.user.id;
 
         const userPayload = {};
-        for (const key of ['email', 'username', 'fullName', 'isActive']) {
+        for (const key of ['email', 'username', 'fullName', 'isActive', 'address']) {
           if (req.body[key] !== undefined) userPayload[key] = req.body[key];
         }
         if (Object.keys(userPayload).length > 0) {

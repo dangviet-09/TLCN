@@ -4,6 +4,7 @@ import { Send, Search, MoreVertical, Phone, Video, Trash2 } from 'lucide-react';
 import socketService from "../../../services/socket";
 import { useAuth } from "../../../contexts/AuthContext";
 import conversationApi from "../../../api/conversationApi";
+import { userApi } from "../../../api/userApi";
 import { ConversationListItem } from "../../../types/types";
 import { Button } from "../../atoms/Button/Button";
 import { Input } from "../../atoms/Input/Input";
@@ -21,6 +22,8 @@ const ConnectionsPage: React.FC = () => {
   const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const convoRetryRef = useRef<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -30,12 +33,22 @@ const ConnectionsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (user?.id) {
+      fetchConversations();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const convoId = params.get("conversationId");
     if (!convoId) return;
     if (conversations.length > 0) {
       const found = conversations.find((c) => c.conversation.id === convoId);
       if (found) setSelected(found);
+      if (!found && !convoRetryRef.current[convoId]) {
+        convoRetryRef.current[convoId] = true;
+        fetchConversations();
+      }
     }
   }, [conversations]);
 
@@ -111,6 +124,45 @@ const ConnectionsPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const loadDisplayNames = async () => {
+      const ids = Array.from(new Set(
+        conversations
+          .map((item) => otherParticipant(item)?.id)
+          .filter(Boolean)
+      )) as string[];
+
+      const missing = ids.filter((id) => !displayNames[id]);
+      if (missing.length === 0) return;
+
+      try {
+        const results = await Promise.all(
+          missing.map((id) => userApi.getById(id).catch(() => null))
+        );
+
+        setDisplayNames((prev) => {
+          const next = { ...prev };
+          results.forEach((result, index) => {
+            const id = missing[index];
+            if (!id || !result) return;
+            if (result.role === 'COMPANY' && (result as any).company?.companyName) {
+              next[id] = (result as any).company.companyName;
+            } else {
+              next[id] = result.fullName || result.username || prev[id] || 'Unknown';
+            }
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error('Failed to load display names:', error);
+      }
+    };
+
+    if (conversations.length > 0) {
+      loadDisplayNames();
+    }
+  }, [conversations, displayNames]);
+
   const fetchMessages = async (conversationId: string) => {
     try {
       const msgs = await conversationApi.getMessages(conversationId, { limit: 50 });
@@ -173,7 +225,7 @@ const ConnectionsPage: React.FC = () => {
 
   const filteredConversations = conversations.filter((c) => {
     const other = otherParticipant(c);
-    const name = (other?.fullName || other?.username || '').toLowerCase();
+    const name = (displayNames[other?.id || ''] || other?.fullName || other?.username || '').toLowerCase();
     return name.includes(searchQuery.toLowerCase());
   });
 
@@ -233,7 +285,7 @@ const ConnectionsPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-gray-900 truncate">
-                          {other?.fullName || other?.username || 'Unknown'}
+                          {displayNames[other?.id || ''] || other?.fullName || other?.username || 'Unknown'}
                         </span>
                         {c.lastMessage && (
                           <span className="text-xs text-gray-500">
@@ -264,18 +316,18 @@ const ConnectionsPage: React.FC = () => {
                   {otherParticipant(selected)?.avatar ? (
                     <img
                       src={otherParticipant(selected)?.avatar ?? ''}
-                      alt={(otherParticipant(selected)?.username || otherParticipant(selected)?.fullName) ?? ''}
+                      alt={displayNames[otherParticipant(selected)?.id || ''] || otherParticipant(selected)?.username || otherParticipant(selected)?.fullName || ''}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <span className="text-white font-semibold">
-                      {(otherParticipant(selected)?.fullName || otherParticipant(selected)?.username || 'U').charAt(0).toUpperCase()}
+                      {(displayNames[otherParticipant(selected)?.id || ''] || otherParticipant(selected)?.fullName || otherParticipant(selected)?.username || 'U').charAt(0).toUpperCase()}
                     </span>
                   )}
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-gray-900">
-                    {otherParticipant(selected)?.fullName || otherParticipant(selected)?.username}
+                    {displayNames[otherParticipant(selected)?.id || ''] || otherParticipant(selected)?.fullName || otherParticipant(selected)?.username}
                   </h2>
                   <p className="text-xs text-green-600">Active now</p>
                 </div>
@@ -317,7 +369,7 @@ const ConnectionsPage: React.FC = () => {
                         {!isMine && (
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
                             <span className="text-white text-xs font-semibold">
-                              {(otherParticipant(selected)?.fullName || 'U').charAt(0).toUpperCase()}
+                              {(displayNames[otherParticipant(selected)?.id || ''] || otherParticipant(selected)?.fullName || otherParticipant(selected)?.username || 'U').charAt(0).toUpperCase()}
                             </span>
                           </div>
                         )}

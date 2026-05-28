@@ -26,14 +26,7 @@ type AuthProviderProps = {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [unreadMessages, setUnreadMessages] = useState<number>(() => {
-        try {
-            const saved = localStorage.getItem('unreadMessages');
-            return saved ? parseInt(saved, 10) : 0;
-        } catch {
-            return 0;
-        }
-    });
+    const [unreadMessages, setUnreadMessages] = useState<number>(0);
     const [notifications, setNotifications] = useState<any[]>(() => {
         try {
             const saved = localStorage.getItem('messageNotifications');
@@ -42,15 +35,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             return [];
         }
     });
-    const [messageHistory, setMessageHistory] = useState<any[]>(() => {
-        try {
-            const saved = localStorage.getItem('persistedMessages');
-            return saved ? JSON.parse(saved) : [];
-        } catch (error) {
-            console.error('AuthContext - Error loading persisted messages:', error);
-            return [];
-        }
-    });
+    const [messageHistory, setMessageHistory] = useState<any[]>([]);
+
+    const getUnreadKey = (userId?: string) => (userId ? `unreadMessages_${userId}` : 'unreadMessages');
+    const getMessageHistoryKey = (userId?: string) => (userId ? `persistedMessages_${userId}` : 'persistedMessages');
+
 
     // Debug: Monitor messageHistory changes
     useEffect(() => {
@@ -108,6 +97,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
     }, []);
 
+    useEffect(() => {
+        try {
+            if (user?.id) {
+                const saved = localStorage.getItem(getUnreadKey(user.id));
+                setUnreadMessages(saved ? parseInt(saved, 10) : 0);
+            } else {
+                setUnreadMessages(0);
+            }
+        } catch {
+            setUnreadMessages(0);
+        }
+    }, [user?.id]);
+
+    useEffect(() => {
+        if (!user?.id) {
+            setMessageHistory([]);
+            return;
+        }
+        try {
+            const saved = localStorage.getItem(getMessageHistoryKey(user.id));
+            setMessageHistory(saved ? JSON.parse(saved) : []);
+        } catch (error) {
+            console.error('AuthContext - Error loading persisted messages:', error);
+            setMessageHistory([]);
+        }
+    }, [user?.id]);
+
     const login = async (username: string, password: string): Promise<void> => {
         try {
             setIsLoading(true);
@@ -133,7 +149,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setMessageHistory([]);
             localStorage.removeItem('messageNotifications');
             localStorage.removeItem('unreadMessages');
-            localStorage.removeItem('persistedMessages');
             setUser(null);
         } catch (error) {
             console.error('Logout error:', error);
@@ -188,7 +203,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const resetUnread = () => {
         setUnreadMessages(0);
-        localStorage.setItem('unreadMessages', '0');
+        if (user?.id) {
+            localStorage.setItem(getUnreadKey(user.id), '0');
+        } else {
+            localStorage.setItem('unreadMessages', '0');
+        }
     };
 
     // Register a single global socket handler when `user` becomes available
@@ -203,7 +222,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     if (message && message.sender && String(message.sender.id) === String(user.id)) return;
                     setUnreadMessages((v) => {
                         const newCount = v + 1;
-                        localStorage.setItem('unreadMessages', newCount.toString());
+                        localStorage.setItem(getUnreadKey(user.id), newCount.toString());
                         return newCount;
                     });
                     // add to messages notifications (separate from system notifications)
@@ -219,7 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         const messageData = { message, conversationId, receivedAt: Date.now(), type: 'MESSAGE', id: Date.now() + Math.random() };
                         const next = [messageData, ...prev];
                         const sliced = next.slice(0, 50); // Keep more messages in history
-                        localStorage.setItem('persistedMessages', JSON.stringify(sliced));
+                        localStorage.setItem(getMessageHistoryKey(user.id), JSON.stringify(sliced));
                         return sliced;
                     });
                 });
@@ -249,7 +268,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const clearMessageHistory = () => {
         setMessageHistory([]);
-        localStorage.removeItem('persistedMessages');
+        if (user?.id) {
+            localStorage.removeItem(getMessageHistoryKey(user.id));
+        }
     };
 
     useEffect(() => {
@@ -268,24 +289,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         receivedAt: item.lastMessage.createdAt ? new Date(item.lastMessage.createdAt).getTime() : Date.now(),
                     }));
 
-                setMessageHistory((prev) => {
-                    const combined = [...recentIncoming, ...(prev || [])];
-                    const uniqueMap = new Map<string, any>();
+                const storageKey = getMessageHistoryKey(user.id);
+                const stored = (() => {
+                    try {
+                        const raw = localStorage.getItem(storageKey);
+                        return raw ? JSON.parse(raw) : [];
+                    } catch {
+                        return [];
+                    }
+                })();
 
-                    combined.forEach((entry: any) => {
-                        const key = entry?.message?.id || entry?.id || `${entry?.conversationId}-${entry?.receivedAt}`;
-                        if (!uniqueMap.has(key)) {
-                            uniqueMap.set(key, entry);
-                        }
-                    });
-
-                    const merged = Array.from(uniqueMap.values())
-                        .sort((a: any, b: any) => (b?.receivedAt || 0) - (a?.receivedAt || 0))
-                        .slice(0, 50);
-
-                    localStorage.setItem('persistedMessages', JSON.stringify(merged));
-                    return merged;
+                const combined = [...recentIncoming, ...(stored || [])];
+                const uniqueMap = new Map<string, any>();
+                combined.forEach((entry: any) => {
+                    const key = entry?.message?.id || entry?.id || `${entry?.conversationId}-${entry?.receivedAt}`;
+                    if (!uniqueMap.has(key)) {
+                        uniqueMap.set(key, entry);
+                    }
                 });
+
+                const merged = Array.from(uniqueMap.values())
+                    .sort((a: any, b: any) => (b?.receivedAt || 0) - (a?.receivedAt || 0))
+                    .slice(0, 50);
+
+                const storedKeys = new Set(
+                    (stored || []).map((entry: any) => entry?.message?.id || entry?.id || `${entry?.conversationId}-${entry?.receivedAt}`)
+                );
+                const newEntries = merged.filter((entry: any) => {
+                    const key = entry?.message?.id || entry?.id || `${entry?.conversationId}-${entry?.receivedAt}`;
+                    return !storedKeys.has(key);
+                });
+
+                if (newEntries.length > 0) {
+                    setUnreadMessages((prev) => {
+                        const base = Number.isFinite(prev) ? prev : 0;
+                        const nextCount = base + newEntries.length;
+                        localStorage.setItem(getUnreadKey(user.id), nextCount.toString());
+                        return nextCount;
+                    });
+                }
+
+                localStorage.setItem(storageKey, JSON.stringify(merged));
+                setMessageHistory(merged);
             } catch (error) {
                 console.error('Failed to hydrate message history from conversations:', error);
             }

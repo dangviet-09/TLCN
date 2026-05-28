@@ -21,7 +21,7 @@ class CompanyController {
       const body = req.body || {};
 
       const userPayload = {};
-      for (const key of ['email', 'username', 'fullName', 'isActive']) {
+      for (const key of ['email', 'username', 'fullName', 'isActive', 'address']) {
         if (body[key] !== undefined) userPayload[key] = body[key];
       }
       if (Object.keys(userPayload).length > 0) {

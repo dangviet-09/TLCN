@@ -4,6 +4,7 @@ import { Blog } from "../../../api/blogApi";
 import { Button } from "../../atoms/Button/Button";
 import { Avatar } from "../../atoms/Avatar";
 import { canUserModifyPost } from "../../../utils/userUtils";
+import { userApi } from "../../../api/userApi";
 
 type BlogHeaderProps = {
     blog: Blog;
@@ -19,6 +20,7 @@ export const BlogHeader: React.FC<BlogHeaderProps> = ({
     onDelete
 }) => {
     const [showDropdown, setShowDropdown] = useState(false);
+    const [authorName, setAuthorName] = useState<string>("Unknown");
     const dropdownRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
 
@@ -42,18 +44,41 @@ export const BlogHeader: React.FC<BlogHeaderProps> = ({
         return canUserModifyPost(currentUser, blog.author);
     };
 
+    useEffect(() => {
+        const fallbackName = () => {
+            if (typeof blog.author === 'object') {
+                return blog.author?.username || 'Unknown';
+            }
+            return blog.author || 'Unknown';
+        };
+
+        const loadAuthorName = async () => {
+            if (typeof blog.author !== 'object' || !blog.author?.id) {
+                setAuthorName(fallbackName());
+                return;
+            }
+
+            try {
+                const user = await userApi.getById(blog.author.id);
+                if (user.role === 'COMPANY' && (user as any).company?.companyName) {
+                    setAuthorName((user as any).company.companyName);
+                    return;
+                }
+                setAuthorName(user.fullName || user.username || fallbackName());
+            } catch {
+                setAuthorName(fallbackName());
+            }
+        };
+
+        loadAuthorName();
+    }, [blog.author]);
+
     const getAuthorName = () => {
-        if (typeof blog.author === 'object') {
-            return blog.author?.username || 'Unknown';
-        }
-        return blog.author || 'Unknown';
+        return authorName;
     };
 
     const getAuthorInitial = () => {
-        if (typeof blog.author === 'object') {
-            return blog.author?.username?.[0]?.toUpperCase() || 'U';
-        }
-        return blog.author?.[0]?.toUpperCase() || 'U';
+        return authorName?.[0]?.toUpperCase() || 'U';
     };
 
     const getAuthorId = () => {

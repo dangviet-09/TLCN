@@ -57,10 +57,14 @@ const UserWallPage: React.FC = () => {
             const userData = await userApi.getById(userId);
             const studentInfo = (userData as any).student;
             const companyInfo = (userData as any).company;
+            const isCompany = userData.role === 'COMPANY';
+            const displayName = isCompany
+                ? (companyInfo?.companyName || userData.fullName || userData.username)
+                : (userData.fullName || userData.username);
 
             const profile: UserProfile = {
                 id: userData.id,
-                name: userData.fullName || userData.username,
+                name: displayName,
                 email: userData.email,
                 role: userData.role || 'USER',
                 type: userData.role === 'STUDENT' ? 'student' : 'company',
@@ -69,6 +73,7 @@ const UserWallPage: React.FC = () => {
                 major: studentInfo?.major,
                 companyName: companyInfo?.companyName,
                 industry: companyInfo?.industry,
+                description: companyInfo?.description,
                 yearEstablished: companyInfo?.yearEstablished,
                 website: companyInfo?.website,
                 address: userData.address,
@@ -276,6 +281,7 @@ const UserWallPage: React.FC = () => {
                     userId={userProfile.id}
                     name={userProfile.name}
                     role={userProfile.role}
+                    description={userProfile.description}
                     avatar={userProfile.avatar}
                     coverColor={userProfile.coverColor}
                     type={userProfile.type}

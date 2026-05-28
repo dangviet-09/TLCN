@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { Button } from '../../atoms/Button/Button';
 import { useAuth } from '../../../contexts/AuthContext';
+import { userApi } from '../../../api/userApi';
 
 type MessageDropdownProps = {
     onToggle?: (isOpen: boolean) => void;
@@ -10,17 +11,65 @@ type MessageDropdownProps = {
 
 const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const { unreadMessages, resetUnread, messageHistory, clearMessageHistory } = useAuth() as any;
+    const { user, unreadMessages, resetUnread, messageHistory, clearMessageHistory } = useAuth() as any;
     const navigate = useNavigate();
+
+    const readMessagesKey = user?.id ? `readMessages_${user.id}` : 'readMessages';
 
     const [readMessages, setReadMessages] = useState<Record<string, number>>(() => {
         try {
-            const saved = localStorage.getItem('readMessages');
+            const saved = localStorage.getItem(readMessagesKey);
             return saved ? JSON.parse(saved) : {};
         } catch {
             return {};
         }
     });
+
+    const [senderNames, setSenderNames] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(readMessagesKey);
+            setReadMessages(saved ? JSON.parse(saved) : {});
+        } catch {
+            setReadMessages({});
+        }
+    }, [readMessagesKey]);
+
+    useEffect(() => {
+        const loadSenderNames = async () => {
+            const ids = Array.from(new Set((messageHistory || [])
+                .map((notification: any) => notification.message?.sender?.id)
+                .filter(Boolean)));
+
+            const missing = ids.filter((id) => !senderNames[id]);
+            if (missing.length === 0) return;
+
+            try {
+                const results = await Promise.all(
+                    missing.map((id) => userApi.getById(id).catch(() => null))
+                );
+
+                setSenderNames((prev) => {
+                    const next = { ...prev };
+                    results.forEach((result, index) => {
+                        const id = missing[index];
+                        if (!id || !result) return;
+                        if (result.role === 'COMPANY' && (result as any).company?.companyName) {
+                            next[id] = (result as any).company.companyName;
+                        } else {
+                            next[id] = result.fullName || result.username || prev[id] || 'Unknown';
+                        }
+                    });
+                    return next;
+                });
+            } catch (error) {
+                console.error('Failed to load sender names:', error);
+            }
+        };
+
+        loadSenderNames();
+    }, [messageHistory, senderNames]);
 
     const groupedMessages = React.useMemo(() => {
         const groups = new Map();
@@ -75,7 +124,7 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
         return groupsArray.sort((a, b) =>
             b.lastMessage.receivedAt - a.lastMessage.receivedAt
         );
-    }, [messageHistory, readMessages]);
+    }, [messageHistory, readMessages, readMessagesKey]);
 
     const messageNotifications = groupedMessages;
 
@@ -83,6 +132,8 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
     const totalUnreadCount = React.useMemo(() => {
         return groupedMessages.reduce((total, group) => total + group.unreadCount, 0);
     }, [groupedMessages]);
+
+    const badgeCount = Math.max(totalUnreadCount, unreadMessages || 0);
 
     // Cleanup read messages when messageHistory changes (e.g., conversations deleted)
     React.useEffect(() => {
@@ -103,7 +154,7 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
         
         if (needsCleanup) {
             setReadMessages(currentReadMessages);
-            localStorage.setItem('readMessages', JSON.stringify(currentReadMessages));
+            localStorage.setItem(readMessagesKey, JSON.stringify(currentReadMessages));
             console.log('Cleaned up read messages for deleted conversations');
         }
     }, [messageHistory, readMessages]);
@@ -134,7 +185,7 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
                 };
 
                 setReadMessages(updatedReadMessages);
-                localStorage.setItem('readMessages', JSON.stringify(updatedReadMessages));
+                localStorage.setItem(readMessagesKey, JSON.stringify(updatedReadMessages));
             }
 
             resetUnread && resetUnread();
@@ -193,9 +244,9 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
                 title="Messages"
             >
                 <MessageCircle className="w-6 h-6" />
-                {(totalUnreadCount || 0) > 0 && (
+                {badgeCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                        {badgeCount > 9 ? '9+' : badgeCount}
                     </span>
                 )}
             </Button>
@@ -233,14 +284,22 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
                                                 src={
                                                     notification.message.sender.avatar ||
                                                     `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                                        notification.message.sender.fullName || notification.message.sender.username || 'User'
+                                                        senderNames[notification.message.sender.id] ||
+                                                        notification.message.sender.fullName ||
+                                                        notification.message.sender.username || 'User'
                                                     )}&background=3B82F6&color=fff&size=40`
                                                 }
-                                                alt={notification.message.sender.fullName || notification.message.sender.username}
+                                                alt={
+                                                    senderNames[notification.message.sender.id] ||
+                                                    notification.message.sender.fullName ||
+                                                    notification.message.sender.username
+                                                }
                                                 className="w-10 h-10 rounded-full object-cover border border-gray-200"
                                                 onError={(e) => {
                                                     const target = e.target as HTMLImageElement;
-                                                    const name = notification.message.sender?.fullName || notification.message.sender?.username || 'User';
+                                                    const name = senderNames[notification.message.sender?.id] ||
+                                                        notification.message.sender?.fullName ||
+                                                        notification.message.sender?.username || 'User';
                                                     target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6B7280&color=fff&size=40`;
                                                 }}
                                             />
@@ -253,7 +312,9 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onToggle }) => {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between">
                                                 <p className="text-sm font-medium text-gray-900">
-                                                    {notification.message?.sender?.fullName || notification.message?.sender?.username || 'Someone'}
+                                                    {senderNames[notification.message?.sender?.id] ||
+                                                        notification.message?.sender?.fullName ||
+                                                        notification.message?.sender?.username || 'Someone'}
                                                 </p>
                                                 {notification.hasUnread && notification.unreadCount > 0 && (
                                                     <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-white bg-red-500 rounded-full">

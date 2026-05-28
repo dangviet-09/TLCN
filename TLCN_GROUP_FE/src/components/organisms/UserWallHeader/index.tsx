@@ -8,6 +8,7 @@ type UserWallHeaderProps = {
   userId: string;
   name: string;
   role: string;
+  description?: string;
   avatar?: string;
   coverColor?: string;
   type: 'student' | 'company';
@@ -28,6 +29,7 @@ type UserWallHeaderProps = {
 export const UserWallHeader: React.FC<UserWallHeaderProps> = ({
   name,
   role,
+  description,
   avatar,
   coverColor = 'from-blue-500 to-purple-600',
   type,
@@ -173,6 +175,9 @@ export const UserWallHeader: React.FC<UserWallHeaderProps> = ({
         <div className="mt-4">
           <h1 className="text-3xl font-bold text-gray-900">{name}</h1>
           <p className="text-gray-600 mt-1">{role}</p>
+          {description && (
+            <p className="text-gray-600 mt-2 max-w-2xl">{description}</p>
+          )}
 
           {/* Stats */}
           <div className="flex items-center gap-6 mt-4">

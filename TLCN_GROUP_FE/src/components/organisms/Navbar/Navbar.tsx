@@ -5,6 +5,7 @@ import { Button } from "../../atoms/Button/Button";
 import { useAuth } from "../../../contexts/AuthContext";
 import searchApi, { } from '../../../api/searchApi';
 import { SearchAllResponse } from '../../../types/types';
+import { userApi } from '../../../api/userApi';
 import { Input } from "../../atoms/Input/Input";
 import NotificationDropdown from "../../molecules/NotificationDropdown";
 import MessageDropdown from "../../molecules/MessageDropdown";
@@ -12,11 +13,6 @@ import MessageDropdown from "../../molecules/MessageDropdown";
 const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout, refreshUser } = useAuth() as any;
   const location = useLocation();
-
-
-  if (['/signin', '/signup', '/forgot-password'].includes(location.pathname)) {
-    return null;
-  }
   const navigate = useNavigate();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const profileRef = useRef<HTMLDivElement | null>(null);
@@ -28,6 +24,7 @@ const Navbar: React.FC = () => {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<'message' | 'notification' | null>(null);
+  const [blogAuthorNames, setBlogAuthorNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isAuthenticated && refreshUser) {
@@ -125,6 +122,47 @@ const Navbar: React.FC = () => {
       }
     };
   }, [searchQuery]);
+
+  useEffect(() => {
+    const loadBlogAuthorNames = async () => {
+      const blogAuthors = (searchResults?.blogs || [])
+        .map((blog) => blog.author?.id)
+        .filter(Boolean) as string[];
+
+      const missing = blogAuthors.filter((id) => !blogAuthorNames[id]);
+      if (missing.length === 0) return;
+
+      try {
+        const results = await Promise.all(
+          missing.map((id) => userApi.getById(id).catch(() => null))
+        );
+
+        setBlogAuthorNames((prev) => {
+          const next = { ...prev };
+          results.forEach((result, index) => {
+            const id = missing[index];
+            if (!id || !result) return;
+            if (result.role === 'COMPANY' && (result as any).company?.companyName) {
+              next[id] = (result as any).company.companyName;
+            } else {
+              next[id] = result.fullName || result.username || prev[id] || 'Blog';
+            }
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error('Failed to load blog author names:', error);
+      }
+    };
+
+    if (searchResults?.blogs?.length) {
+      loadBlogAuthorNames();
+    }
+  }, [searchResults, blogAuthorNames]);
+
+  if (['/signin', '/signup', '/forgot-password'].includes(location.pathname)) {
+    return null;
+  }
 
   return (
     <nav className="sticky top-0 z-50 flex items-center px-4 sm:px-10 py-4 border-b border-[#F3D94B] bg-white shadow-sm">
@@ -314,7 +352,9 @@ const Navbar: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {blog.author?.fullName || blog.author?.username || 'Blog'}
+                            {blog.author?.id
+                              ? (blogAuthorNames[blog.author.id] || blog.author?.fullName || blog.author?.username || 'Blog')
+                              : (blog.author?.fullName || blog.author?.username || 'Blog')}
                           </p>
                           <p className="text-xs text-gray-500 truncate">
                             {blog.content || blog.category || 'Blog post'}
@@ -401,6 +441,18 @@ const Navbar: React.FC = () => {
                         <span>Profile</span>
                       </Button>
                     </Link>
+
+                    {user?.role === 'ADMIN' && (
+                      <Link to="/admin/dashboard" onClick={() => setShowProfileDropdown(false)}>
+                        <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2 group">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 group-hover:text-red-600 transition-colors">
+                            <path d="M3 12l2-2m0 0l7-7 7 7"></path>
+                            <path d="M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3"></path>
+                          </svg>
+                          <span>Dashboard</span>
+                        </Button>
+                      </Link>
+                    )}
 
                     <Link to="/settings" onClick={() => setShowProfileDropdown(false)}>
                       <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors flex items-center gap-2 group">

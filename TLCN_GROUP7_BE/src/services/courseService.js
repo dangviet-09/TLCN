@@ -1,0 +1,618 @@
+const kafkaModule = require('../kafka');
+const db = require("../models");
+const LessonService = require("./lessonService");
+const TestService = require("./testService");
+
+class CourseService {
+
+  // ==============================
+  // CRUD cơ bản cho Course (kế thừa từ careerPathService.js)
+  // ==============================
+
+  async createCourse(userId, data, files) {
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    let companyIdForPath = null;
+
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      companyIdForPath = company.id;
+    } else if (user.role === 'ADMIN') {
+      let systemCompany = await db.Company.findOne({ where: { companyName: 'System Admin' } });
+      if (!systemCompany) {
+        systemCompany = await db.Company.create({
+          companyName: 'System Admin',
+          description: 'System generated company for admin-created content',
+          website: null,
+          location: null,
+          size: null,
+          industry: null,
+          logo: null,
+          publicId: null,
+          userId: userId,
+          verified: true
+        });
+      }
+      companyIdForPath = systemCompany.id;
+    } else {
+      throw new Error('Bạn không có quyền tạo course');
+    }
+
+    const course = await db.CareerPath.create({
+      title: data.title,
+      description: data.description || null,
+      category: data.category || null,
+      level: data.level || null,
+      companyId: companyIdForPath,
+      image: null,
+      publicId: null,
+      status: data.status || 'DRAFT'
+    });
+
+    if (files?.images?.length) {
+      const file = files.images[0];
+      await kafkaModule.producers.courseImageProducer.sendUploadEvent({
+        courseId: course.id,
+        bufferBase64: file.buffer.toString('base64'),
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        type: "CREATE"
+      });
+    }
+
+    return course;
+  }
+
+  async updateCourse(userId, courseId, data) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền chỉnh sửa course này");
+    } else if (user.role === 'ADMIN') {
+      // ADMIN bỏ qua ownership check
+    } else {
+      throw new Error("Bạn không có quyền chỉnh sửa course");
+    }
+
+    await course.update({
+      title: data.title ?? course.title,
+      description: data.description ?? course.description,
+      category: data.category ?? course.category,
+      level: data.level ?? course.level,
+      status: data.status ?? course.status
+    });
+
+    if (data.fileBase64) {
+      try {
+        await kafkaModule.producers.courseImageProducer.sendUploadEvent({
+          courseId: course.id,
+          bufferBase64: data.fileBase64,
+          originalName: data.originalName,
+          mimeType: data.mimeType,
+          size: data.size,
+          type: "UPDATE",
+          oldPublicId: course.publicId
+        });
+      } catch (error) {
+        console.error("Lỗi upload ảnh: ", error);
+        throw new Error("Lỗi upload ảnh course");
+      }
+    }
+
+    return course;
+  }
+
+  async deleteCourse(userId, courseId) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền xoá course này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền xoá course");
+    }
+
+    if (course.publicId) {
+      try {
+        await kafkaModule.producers.courseImageProducer.sendUploadEvent({
+          courseId: course.id,
+          type: "DELETE",
+          oldPublicId: course.publicId
+        });
+      } catch (error) {
+        console.error("Lỗi xóa ảnh: ", error);
+        throw new Error("Lỗi xóa ảnh course");
+      }
+    }
+
+    await db.CareerPath.destroy({ where: { id: course.id } });
+    return true;
+  }
+
+  async getAllCourses(page = 1, limit = 10, filters = {}) {
+    const offset = (page - 1) * limit;
+    const where = { status: 'PUBLISHED' };
+
+    if (filters.category) {
+      where.category = filters.category;
+    }
+    if (filters.level) {
+      where.level = filters.level;
+    }
+    if (filters.search) {
+      where[db.Sequelize.Op.or] = [
+        { title: { [db.Sequelize.Op.like]: `%${filters.search}%` } },
+        { description: { [db.Sequelize.Op.like]: `%${filters.search}%` } }
+      ];
+    }
+
+    const { rows, count } = await db.CareerPath.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+      include: [{ model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo'] }]
+    });
+
+    return { total: count, page, limit, data: rows };
+  }
+
+  async getCourseById(courseId, userId = null) {
+    const course = await db.CareerPath.findByPk(courseId, {
+      include: [{ model: db.Company, as: 'company', attributes: ['id', 'userId', 'companyName'] }]
+    });
+    if (!course) throw new Error("Course không tồn tại");
+
+    let user = null;
+    if (userId) {
+      user = await db.User.findOne({ where: { id: userId } });
+    }
+    const isOwner = userId && course.company?.userId === userId;
+    const isAdmin = user?.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin && course.status !== 'PUBLISHED') {
+      throw new Error("Course chưa được xuất bản");
+    }
+
+    const lessons = await LessonService.getAllLessons(courseId);
+    for (let lesson of lessons) {
+      lesson.miniTests = await TestService.getTestsByLesson(lesson.id);
+    }
+    const finalTest = await TestService.getFinalTestByCareerPath(courseId);
+
+    course.lessons = lessons;
+    course.finalTest = finalTest;
+
+    return course;
+  }
+
+  async getCoursesByCompany(userId, page = 1, limit = 10) {
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error('User không tồn tại');
+
+    const offset = (page - 1) * limit;
+    const queryOptions = {
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+      include: [{ model: db.Company, as: 'company', attributes: ['id', 'companyName', 'userId'] }]
+    };
+
+    if (user.role === 'ADMIN') {
+      const systemCompany = await db.Company.findOne({ where: { companyName: 'System Admin' } });
+      queryOptions.where = { companyId: systemCompany ? systemCompany.id : null };
+    } else if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      queryOptions.where = { companyId: company.id };
+    } else {
+      throw new Error('Bạn không có quyền xem danh sách course');
+    }
+
+    const { rows, count } = await db.CareerPath.findAndCountAll(queryOptions);
+    return { total: count, page, limit, data: rows };
+  }
+
+  async publishCourse(userId, courseId) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền xuất bản course này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền xuất bản course");
+    }
+
+    await course.update({
+      status: 'PUBLISHED',
+      publishedAt: new Date()
+    });
+
+    return course;
+  }
+
+  // ==============================
+  // CRUD cơ bản cho Lesson (kế thừa từ lessonService.js)
+  // ==============================
+
+  async createLesson(userId, courseId, data) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền thêm lesson vào course này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền thêm lesson");
+    }
+
+    return await db.Lesson.create({
+      title: data.title,
+      content: data.content || null,
+      order: data.order || 0,
+      careerPathId: courseId
+    });
+  }
+
+  async updateLesson(userId, lessonId, data) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+
+    const course = await db.CareerPath.findByPk(lesson.careerPathId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền chỉnh sửa lesson này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền chỉnh sửa lesson");
+    }
+
+    await lesson.update({
+      title: data.title ?? lesson.title,
+      content: data.content ?? lesson.content,
+      order: data.order ?? lesson.order
+    });
+
+    return lesson;
+  }
+
+  async deleteLesson(userId, lessonId) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+
+    const course = await db.CareerPath.findByPk(lesson.careerPathId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền xoá lesson này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền xoá lesson");
+    }
+
+    await db.Lesson.destroy({ where: { id: lessonId } });
+    return true;
+  }
+
+  // ==============================
+  // Hàm mới: Cập nhật nội dung bài học (7 cột mới của Lesson)
+  // ==============================
+
+  async updateLessonContent(userId, lessonId, data) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+
+    const course = await db.CareerPath.findByPk(lesson.careerPathId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const user = await db.User.findOne({ where: { id: userId } });
+    if (!user) throw new Error("User không tồn tại");
+
+    // === RBAC: Kiểm tra Ownership ===
+    if (user.role === 'COMPANY') {
+      const company = await db.Company.findOne({ where: { userId: userId } });
+      if (!company) throw new Error('Không tìm thấy công ty của bạn');
+      if (course.companyId !== company.id) throw new Error("Không có quyền cập nhật nội dung lesson này");
+    } else if (user.role !== 'ADMIN') {
+      throw new Error("Bạn không có quyền cập nhật nội dung lesson");
+    }
+
+    // Ghi dữ liệu trực tiếp vào 7 cột mới của Lesson
+    await lesson.update({
+      type: data.type ?? lesson.type,
+      theoryContent: data.theoryContent ?? lesson.theoryContent,
+      taskDescription: data.taskDescription ?? lesson.taskDescription,
+      submissionFields: data.submissionFields ?? lesson.submissionFields,
+      attachments: data.attachments ?? lesson.attachments,
+      referenceLinks: data.referenceLinks ?? lesson.referenceLinks,
+      rubric: data.rubric ?? lesson.rubric
+    });
+
+    return lesson;
+  }
+
+  // ==============================
+  // Hàm mới: Sinh viên nộp bài thực hành (TASK lesson)
+  // ==============================
+
+  async submitLessonTask(studentId, courseId, lessonId, submissionData) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+    if (lesson.careerPathId !== courseId) throw new Error("Lesson không thuộc course này");
+    if (lesson.type !== 'TASK') throw new Error("Lesson này không phải loại TASK");
+
+    const student = await db.Student.findOne({ where: { id: studentId } });
+    if (!student) throw new Error("Student không tồn tại");
+
+    // Kiểm tra sinh viên đã enrolled course chưa
+    const progress = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId: courseId }
+    });
+    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
+
+    // Kiểm tra chưa nộp bài (hoặc cho phép nộp lại — tuỳ quyết định)
+    const existingSubmission = await db.CourseSubmission.findOne({
+      where: { studentId, lessonId, careerPathId: courseId }
+    });
+
+    let submission;
+    if (existingSubmission) {
+      // Cập nhật submission cũ (nộp lại)
+      await existingSubmission.update({
+        submissionData,
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+        score: null,
+        aiGrading: null,
+        gradedAt: null
+      });
+      submission = existingSubmission;
+    } else {
+      submission = await db.CourseSubmission.create({
+        studentId,
+        lessonId,
+        careerPathId: courseId,
+        submissionData,
+        status: 'SUBMITTED',
+        submittedAt: new Date()
+      });
+    }
+
+    // Gọi AI grading (phương thức sẽ được thêm ở Bước 2.7)
+    try {
+      const aiService = require('./aiService');
+      const gradingResult = await aiService.gradeLessonTask(
+        submissionData,
+        lesson.rubric,
+        lesson.submissionFields
+      );
+
+      await submission.update({
+        score: gradingResult.score,
+        aiGrading: gradingResult,
+        status: 'GRADED',
+        gradedAt: new Date()
+      });
+
+      return submission;
+    } catch (error) {
+      console.error('[CourseService.submitLessonTask] AI grading error:', error.message);
+      // Lưu submission thành công, grading thất bại → vẫn trả về submission để student biết đã nộp
+      return submission;
+    }
+  }
+
+  // ==============================
+  // Hàm mới: Hoàn thành bài học lý thuyết (THEORY lesson)
+  // ==============================
+
+  async completeTheoryLesson(studentId, courseId, lessonId) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+    if (lesson.careerPathId !== courseId) throw new Error("Lesson không thuộc course này");
+    if (lesson.type !== 'THEORY') throw new Error("Lesson này không phải loại THEORY");
+
+    const student = await db.Student.findOne({ where: { id: studentId } });
+    if (!student) throw new Error("Student không tồn tại");
+
+    const progress = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId: courseId }
+    });
+    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
+
+    // Lấy danh sách lesson theo thứ tự để xác định lesson tiếp theo
+    const lessons = await db.Lesson.findAll({
+      where: { careerPathId: courseId },
+      order: [["order", "ASC"]],
+      attributes: ['id', 'order']
+    });
+
+    const currentIndex = lessons.findIndex(l => l.id === lessonId);
+    const nextLesson = lessons[currentIndex + 1] || null;
+
+    await progress.update({
+      status: 'IN_PROGRESS',
+      lastCompletedLessonId: lessonId,
+      currentLessonId: nextLesson ? nextLesson.id : progress.currentLessonId
+    });
+
+    // Nếu là lesson cuối cùng → đánh dấu COMPLETED
+    if (!nextLesson) {
+      await progress.update({ status: 'COMPLETED' });
+    }
+
+    return progress;
+  }
+
+  // ==============================
+  // Tiến độ học tập của sinh viên
+  // ==============================
+
+  async enrollCourse(studentId, courseId) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+    if (course.status !== 'PUBLISHED') throw new Error("Course chưa được xuất bản");
+
+    const student = await db.Student.findOne({ where: { id: studentId } });
+    if (!student) throw new Error("Student không tồn tại");
+
+    const existing = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId: courseId }
+    });
+    if (existing) throw new Error("Bạn đã đăng ký khóa học này rồi");
+
+    // Lấy bài học đầu tiên để set currentLesson
+    const firstLesson = await db.Lesson.findOne({
+      where: { careerPathId: courseId },
+      order: [["order", "ASC"]]
+    });
+
+    return await db.StudentProgress.create({
+      studentId,
+      careerPathId: courseId,
+      status: 'NOT_STARTED',
+      currentLessonId: firstLesson ? firstLesson.id : null,
+      lastCompletedLessonId: null
+    });
+  }
+
+  async getCourseProgress(studentId, courseId) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    const student = await db.Student.findOne({ where: { id: studentId } });
+    if (!student) throw new Error("Student không tồn tại");
+
+    const progress = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId: courseId }
+    });
+    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
+
+    // Lấy danh sách bài học với trạng thái
+    const lessons = await db.Lesson.findAll({
+      where: { careerPathId: courseId },
+      order: [["order", "ASC"]]
+    });
+
+    // Lấy submissions để biết bài nào đã nộp
+    const submissions = await db.CourseSubmission.findAll({
+      where: { studentId, careerPathId: courseId }
+    });
+
+    const submissionMap = {};
+    submissions.forEach(s => { submissionMap[s.lessonId] = s; });
+
+    const lessonsWithStatus = lessons.map(lesson => {
+      const submission = submissionMap[lesson.id];
+      return {
+        ...lesson.toJSON(),
+        status: submission
+          ? submission.status
+          : lesson.id === progress.currentLessonId
+            ? 'IN_PROGRESS'
+            : 'NOT_STARTED'
+      };
+    });
+
+    return { progress, lessons: lessonsWithStatus };
+  }
+
+  async getLessonDetail(studentId, courseId, lessonId) {
+    const lesson = await db.Lesson.findByPk(lessonId);
+    if (!lesson) throw new Error("Lesson không tồn tại");
+    if (lesson.careerPathId !== courseId) throw new Error("Lesson không thuộc course này");
+
+    const student = await db.Student.findOne({ where: { id: studentId } });
+    if (!student) throw new Error("Student không tồn tại");
+
+    const progress = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId: courseId }
+    });
+    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
+
+    // Lấy submission nếu là TASK lesson
+    let submission = null;
+    if (lesson.type === 'TASK') {
+      submission = await db.CourseSubmission.findOne({
+        where: { studentId, lessonId, careerPathId: courseId }
+      });
+    }
+
+    return { lesson, submission, progress };
+  }
+
+  // ==============================
+  // Admin endpoints
+  // ==============================
+
+  async getAllCoursesAdmin(page = 1, limit = 10, filters = {}) {
+    const offset = (page - 1) * limit;
+    const where = {};
+    if (filters.status) where.status = filters.status;
+
+    const { rows, count } = await db.CareerPath.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+      include: [{ model: db.Company, as: 'company', attributes: ['id', 'companyName'] }]
+    });
+
+    return { total: count, page, limit, data: rows };
+  }
+
+  async updateCourseStatusAdmin(courseId, status) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    await course.update({ status });
+    return course;
+  }
+
+  async deleteCourseAdmin(courseId) {
+    const course = await db.CareerPath.findByPk(courseId);
+    if (!course) throw new Error("Course không tồn tại");
+
+    await db.CareerPath.destroy({ where: { id: courseId } });
+    return true;
+  }
+}
+
+module.exports = new CourseService();

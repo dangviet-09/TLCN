@@ -493,57 +493,101 @@ class JobPostingService {
     };
   }
 
-  async suggestLearningPath(jobPostingId) {
-    const job = await db.JobPosting.findByPk(jobPostingId);
-    if (!job) throw new Error('Job không tồn tại');
+  async suggestLearningPath(studentId, jobPostingId) {
+    // Bước 1: Lấy kết quả skill gap
+    const gap = await this.analyzeSkillGap(studentId, jobPostingId);
 
-    const skillRequirements = job.skillRequirements || [];
+    // Bước 2: Lọc ra các kỹ năng bị thiếu (matched === false) từ cả required và niceToHave
+    const missingRequired = (gap.required || []).filter(s => !s.matched);
+    const missingNiceToHave = (gap.niceToHave || []).filter(s => !s.matched);
 
-    // MOCK DATA — logic thật sẽ làm ở Phase 4
+    // Bước 3: Bảo vệ — nếu không có kỹ năng thiếu, trả về ngay
+    if (missingRequired.length === 0 && missingNiceToHave.length === 0) {
+      return { mustLearn: [], niceToKnow: [] };
+    }
+
+    // Bước 4: Gộp tên kỹ năng thiếu thành chuỗi query, gọi AI đúng 1 lần
+    const allMissing = [...missingRequired, ...missingNiceToHave];
+    const missingSkillNames = allMissing.map(s => s.skillName);
+    const query = 'Các khóa học về: ' + missingSkillNames.join(', ');
+
+    let aiResults = [];
+    try {
+      aiResults = await aiService.searchCourses(query);
+    } catch (_) {
+      aiResults = [];
+    }
+
+    // Bước 5: Trích xuất courseIds từ kết quả AI
+    const courseIds = aiResults
+      .map(r => r.id || r.courseId || null)
+      .filter(id => id != null);
+
+    // Bước 6: Nếu AI không tìm được khóa nào, trả về mảng rỗng
+    if (courseIds.length === 0) {
+      return { mustLearn: [], niceToKnow: [] };
+    }
+
+    // Bước 7: Chống N+1 — truy vấn tất cả lessons cho các courseIds đúng 1 lần
+    const allLessons = await db.Lesson.findAll({
+      where: { careerPathId: { [db.Sequelize.Op.in]: courseIds } },
+      order: [['order', 'ASC']]
+    });
+
+    // Bước 8: Map lessons theo careerPathId
+    const lessonsByCourse = {};
+    for (const lesson of allLessons) {
+      if (!lessonsByCourse[lesson.careerPathId]) {
+        lessonsByCourse[lesson.careerPathId] = [];
+      }
+      lessonsByCourse[lesson.careerPathId].push({ id: lesson.id, title: lesson.title });
+    }
+
+    // Bước 9: Map AI results theo courseId để lấy courseTitle
+    const courseInfoMap = {};
+    for (const r of aiResults) {
+      const cid = r.id || r.courseId;
+      if (cid) courseInfoMap[cid] = r;
+    }
+
+    // Bước 10: Phân loại mustLearn (REQUIRED) và niceToKnow (NICE_TO_HAVE)
     const mustLearn = [];
     const niceToKnow = [];
 
-    // Lấy các course phù hợp với skill thiếu (mock)
-    const courses = await db.CareerPath.findAll({
-      where: { status: 'PUBLISHED' },
-      limit: 5,
-      include: [
-        { model: db.Company, as: 'company', attributes: ['id', 'companyName'] }
-      ]
-    });
-
-    const requiredSkills = skillRequirements.filter(s => s.level === 'REQUIRED');
-    const niceToHaveSkills = skillRequirements.filter(s => s.level === 'NICE_TO_HAVE');
-
-    for (const skill of requiredSkills) {
-      const matchedCourse = courses.find(c =>
-        c.title.toLowerCase().includes(skill.skillName.toLowerCase()) ||
-        (c.description && c.description.toLowerCase().includes(skill.skillName.toLowerCase()))
-      );
+    for (const skill of missingRequired) {
+      const matchedCourse = aiResults.find(r => {
+        const cid = r.id || r.courseId;
+        const title = (r.title || '').toLowerCase();
+        const desc = (r.description || '').toLowerCase();
+        const skillName = skill.skillName.toLowerCase();
+        return cid && (title.includes(skillName) || desc.includes(skillName));
+      });
       if (matchedCourse) {
-        const lessons = await db.Lesson.findAll({
-          where: { careerPathId: matchedCourse.id },
-          order: [['order', 'ASC']],
-          limit: 3
-        });
+        const cid = matchedCourse.id || matchedCourse.courseId;
         mustLearn.push({
-          courseId: matchedCourse.id,
-          courseTitle: matchedCourse.title,
+          courseId: cid,
+          courseTitle: matchedCourse.title || '',
           skillNeeded: skill.skillName,
-          lessons: lessons.map(l => ({ id: l.id, title: l.title }))
+          lessons: (lessonsByCourse[cid] || []).slice(0, 3)
         });
       }
     }
 
-    for (const skill of niceToHaveSkills) {
-      const matchedCourse = courses.find(c =>
-        c.title.toLowerCase().includes(skill.skillName.toLowerCase())
-      );
+    for (const skill of missingNiceToHave) {
+      const matchedCourse = aiResults.find(r => {
+        const cid = r.id || r.courseId;
+        const title = (r.title || '').toLowerCase();
+        const desc = (r.description || '').toLowerCase();
+        const skillName = skill.skillName.toLowerCase();
+        return cid && (title.includes(skillName) || desc.includes(skillName));
+      });
       if (matchedCourse) {
+        const cid = matchedCourse.id || matchedCourse.courseId;
         niceToKnow.push({
-          courseId: matchedCourse.id,
-          courseTitle: matchedCourse.title,
-          skillNeeded: skill.skillName
+          courseId: cid,
+          courseTitle: matchedCourse.title || '',
+          skillNeeded: skill.skillName,
+          lessons: (lessonsByCourse[cid] || []).slice(0, 3)
         });
       }
     }

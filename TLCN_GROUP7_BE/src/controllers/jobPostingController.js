@@ -1,3 +1,4 @@
+const db = require('../models');
 const jobPostingService = require('../services/jobPostingService');
 const studentService = require('../services/studentService');
 const ApiResponse = require('../utils/apiResponse');
@@ -118,7 +119,10 @@ class JobPostingController {
 
   async getLearningPath(req, res) {
     try {
-      const result = await jobPostingService.suggestLearningPath(req.params.id);
+      const student = await db.Student.findOne({ where: { userId: req.user.id } });
+      if (!student) return ApiResponse.error(res, 'Student không tồn tại', 404);
+
+      const result = await jobPostingService.suggestLearningPath(student.id, req.params.id);
       return ApiResponse.success(res, 'Gợi ý lộ trình học thành công', result);
     } catch (error) {
       return ApiResponse.error(res, error.message, 400);

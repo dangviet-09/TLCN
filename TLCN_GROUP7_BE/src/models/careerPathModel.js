@@ -22,6 +22,23 @@ module.exports = (sequelize, DataTypes) => {
       references: { model: 'companies', key: 'id' }, // FIXED
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
+    },
+    level: {
+      type: DataTypes.ENUM('BEGINNER', 'INTERMEDIATE', 'ADVANCED'),
+      allowNull: true
+    },
+    category: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    publishedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    isFeatured: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
     }
   }, {
     tableName: 'career_paths',

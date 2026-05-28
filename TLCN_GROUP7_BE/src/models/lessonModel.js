@@ -10,7 +10,35 @@ module.exports = (sequelize, DataTypes) => {
     careerPathId: {
       type: DataTypes.UUID,
       references: { model: 'career_paths', key: 'id' },
-      onDelete: 'CASCADE'}
+      onDelete: 'CASCADE'},
+    type: {
+      type: DataTypes.ENUM('TASK', 'THEORY'),
+      allowNull: true
+    },
+    theoryContent: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    taskDescription: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    submissionFields: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    attachments: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    referenceLinks: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    rubric: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    }
   }, {
     tableName: 'lessons',
     timestamps: true

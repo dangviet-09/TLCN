@@ -206,6 +206,9 @@ GIỚI HẠN VÀ RANH GIỚI:
 
   async searchCourses(query) {
     try {
+      //Gọi Local Require để phá vỡ Circular Dependency
+      const vectorService = require('./vectorService');
+
       // Check if vector database is ready
       const isVectorReady = await vectorService.isReady();
       
@@ -232,6 +235,7 @@ GIỚI HẠN VÀ RANH GIỚI:
       }
 
       // Fallback to traditional SQL search
+      const db = require('../models'); // Cắt đứt vòng lặp db
       const courses = await db.CareerPath.findAll({
         where: {
           status: 'PUBLISHED',

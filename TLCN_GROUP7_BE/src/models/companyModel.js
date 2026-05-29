@@ -27,7 +27,11 @@ module.exports = (sequelize, DataTypes) => {
 
     industry: DataTypes.STRING,
     website: DataTypes.STRING,
-    description: DataTypes.TEXT
+    description: DataTypes.TEXT,
+    logo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    }
   }, {
     tableName: "companies",
     timestamps: true

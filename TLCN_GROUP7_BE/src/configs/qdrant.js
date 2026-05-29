@@ -4,16 +4,18 @@ const { QdrantClient } = require('@qdrant/js-client-rest');
 const QDRANT_CONFIG = {
     host: process.env.QDRANT_HOST || 'localhost',
     port: process.env.QDRANT_PORT || 6333,
-    apiKey: process.env.QDRANT_API_KEY, // Optional for cloud
+    apiKey: process.env.QDRANT_API_KEY,
 };
 
 class QdrantConfig {
     constructor() {
-        // Handle URL properly - remove http:// prefix if exists
+        // Chuẩn hóa host: Cắt bỏ http:// hoặc https:// nếu có
         const host = QDRANT_CONFIG.host.replace(/^https?:\/\//, '');
+        // Tự động nhận diện: Nếu host là cloud (chứa qdrant.tech/qdrant.io) thì dùng https
+        const protocol = (host.includes('qdrant.tech') || host.includes('qdrant.io')) ? 'https' : 'http';
 
         this.client = new QdrantClient({
-            url: `http://${host}:${QDRANT_CONFIG.port}`,
+            url: `${protocol}://${host}:${QDRANT_CONFIG.port}`,
             apiKey: QDRANT_CONFIG.apiKey,
             checkCompatibility: false // Skip version check
         });
@@ -27,11 +29,9 @@ class QdrantConfig {
 
     async initializeCollections() {
         try {
-            // Create collections if they don't exist
             for (const [key, collectionName] of Object.entries(this.collections)) {
                 await this.createCollectionIfNotExists(collectionName);
             }
-
         } catch (error) {
             console.error('Error initializing Qdrant collections:', error);
             throw error;
@@ -40,7 +40,6 @@ class QdrantConfig {
 
     async createCollectionIfNotExists(collectionName) {
         try {
-            // Check if collection exists
             const collections = await this.client.getCollections();
             const exists = collections.collections?.some(c => c.name === collectionName);
 
@@ -60,14 +59,12 @@ class QdrantConfig {
 
     async testConnection() {
         try {
-            const host = QDRANT_CONFIG.host.replace(/^https?:\/\//, '');
-            const url = `http://${host}:${QDRANT_CONFIG.port}`;
-            // Try to get collections - simpler than cluster API
-            const collections = await this.client.getCollections();
+            // Thử lấy danh sách collections để test kết nối
+            await this.client.getCollections();
+            console.log('✅ Qdrant Database connected successfully');
             return true;
         } catch (error) {
-            console.error('Qdrant connection failed:', error.message);
-            console.error('Make sure Qdrant server is running and accessible');
+            console.error('❌ Qdrant connection failed:', error.message);
             return false;
         }
     }

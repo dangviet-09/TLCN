@@ -1,4 +1,4 @@
-const vectorService = require('../services/vectorService');
+
 const qdrantConfig = require('../configs/qdrant');
 
 module.exports = (sequelize, DataTypes) => {
@@ -80,6 +80,8 @@ module.exports = (sequelize, DataTypes) => {
   // Hooks for vector database synchronization
   Test.addHook('afterCreate', async (test, options) => {
     try {
+      const vectorService = require('../services/vectorService'); // CHÍNH XÁC LÀ DÒNG NÀY
+      
       // Load with lesson and career path data for vector indexing
       const { Lesson, CareerPath } = require('./index');
       const testWithRelations = await Test.findByPk(test.id, {
@@ -105,6 +107,8 @@ module.exports = (sequelize, DataTypes) => {
 
   Test.addHook('afterUpdate', async (test, options) => {
     try {
+      const vectorService = require('../services/vectorService'); // CHÍNH XÁC LÀ DÒNG NÀY
+      
       // Re-index updated test
       const { Lesson, CareerPath } = require('./index');
       const testWithRelations = await Test.findByPk(test.id, {
@@ -130,6 +134,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Test.addHook('afterDestroy', async (test, options) => {
     try {
+      const vectorService = require('../services/vectorService'); // CHÍNH XÁC LÀ DÒNG NÀY
       await vectorService.deleteFromVector(qdrantConfig.collections.TESTS, test.id);
     } catch (error) {
       console.error('Error deleting test from vector database:', error);

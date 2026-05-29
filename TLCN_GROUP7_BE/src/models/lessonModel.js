@@ -1,4 +1,4 @@
-const vectorService = require('../services/vectorService');
+
 const qdrantConfig = require('../configs/qdrant');
 
 module.exports = (sequelize, DataTypes) => {
@@ -53,6 +53,7 @@ module.exports = (sequelize, DataTypes) => {
   Lesson.addHook('afterCreate', async (lesson, options) => {
     try {
       // Load with career path data for vector indexing
+      const vectorService = require('../services/vectorService');
       const { CareerPath } = require('./index');
       const lessonWithCareerPath = await Lesson.findByPk(lesson.id, {
         include: [{ model: CareerPath, as: 'careerPath', attributes: ['title', 'description'] }]
@@ -67,6 +68,7 @@ module.exports = (sequelize, DataTypes) => {
   Lesson.addHook('afterUpdate', async (lesson, options) => {
     try {
       // Re-index updated lesson
+      const vectorService = require('../services/vectorService');
       const { CareerPath } = require('./index');
       const lessonWithCareerPath = await Lesson.findByPk(lesson.id, {
         include: [{ model: CareerPath, as: 'careerPath', attributes: ['title', 'description'] }]
@@ -80,6 +82,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Lesson.addHook('afterDestroy', async (lesson, options) => {
     try {
+      const vectorService = require('../services/vectorService');
       await vectorService.deleteFromVector(qdrantConfig.collections.LESSONS, lesson.id);
     } catch (error) {
       console.error('Error deleting lesson from vector database:', error);

@@ -155,7 +155,7 @@ class JobPostingService {
   async getJobById(jobId) {
     const job = await db.JobPosting.findByPk(jobId, {
       include: [
-        { model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo', 'website', 'location'] }
+        { model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo'], required: false }
       ]
     });
     if (!job) throw new Error('Job không tồn tại');
@@ -183,7 +183,7 @@ class JobPostingService {
       offset,
       order: [['createdAt', 'DESC']],
       include: [
-        { model: db.Company, as: 'company', attributes: ['id', 'companyName'] }
+        { model: db.Company, as: 'company', attributes: ['id', 'companyName'], required: false }
       ],
       attributes: ['id', 'title', 'location', 'employmentType', 'experienceLevel', 'status', 'skillRequirements']
     });

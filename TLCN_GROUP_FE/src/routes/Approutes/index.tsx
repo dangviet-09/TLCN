@@ -21,6 +21,24 @@ import ConnectionsPage from "../../components/pages/Connections";
 import UserProfilePage from "../../components/pages/UserProfile";
 import AIChat from "../../components/pages/AIChat";
 
+// Phase 5: Course pages
+import CourseListPage from "../../pages/Course/CourseListPage";
+import CourseStudyPage from "../../pages/Course/CourseStudyPage";
+import MyCoursesPage from "../../pages/Course/MyCoursesPage";
+// Phase 5: Company pages
+import CompanyCourseManage from "../../pages/Company/CompanyCourseManage";
+import CompanyCourseEdit from "../../pages/Company/CompanyCourseEdit";
+import CompanyJobManage from "../../pages/Company/CompanyJobManage";
+import CompanyCareerTestManage from "../../pages/Company/CompanyCareerTestManage";
+// Phase 5: Admin pages
+import AdminCoursePage from "../../pages/Admin/AdminCoursePage";
+import AdminJobPage from "../../pages/Admin/AdminJobPage";
+import AdminCareerTestPage from "../../pages/Admin/AdminCareerTestPage";
+// Phase 5: Job pages
+import JobMarketPage from "../../pages/Job/JobMarketPage";
+import JobDetailPage from "../../pages/Job/JobDetailPage";
+import MyApplicationsPage from "../../pages/Job/MyApplicationsPage";
+
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
 
@@ -57,6 +75,28 @@ const AppRoutes: React.FC = () => {
       <Route path="/connections" element={<ConnectionsPage />} />
       <Route path="/users/:id" element={<UserProfilePage />} />
       <Route path="/ai-chat" element={<AIChat />} />
+
+      {/* Phase 5: Course routes */}
+      <Route path="/courses" element={<CourseListPage />} />
+      <Route path="/courses/:id" element={<CourseStudyPage />} />
+      <Route path="/courses/:courseId/lessons/:lessonId" element={<CourseStudyPage />} />
+      <Route path="/my-courses" element={<MyCoursesPage />} />
+
+      {/* Phase 5: Company routes */}
+      <Route path="/company/courses" element={<CompanyCourseManage />} />
+      <Route path="/company/courses/:id/edit" element={<CompanyCourseEdit />} />
+      <Route path="/company/jobs" element={<CompanyJobManage />} />
+      <Route path="/company/career-tests" element={<CompanyCareerTestManage />} />
+
+      {/* Phase 5: Admin routes */}
+      <Route path="/admin/courses" element={<AdminCoursePage />} />
+      <Route path="/admin/jobs" element={<AdminJobPage />} />
+      <Route path="/admin/career-tests" element={<AdminCareerTestPage />} />
+
+      {/* Phase 5: Job routes */}
+      <Route path="/jobs/market" element={<JobMarketPage />} />
+      <Route path="/jobs/:id" element={<JobDetailPage />} />
+      <Route path="/my-applications" element={<MyApplicationsPage />} />
 
       {/* Catch-all route */}
       <Route

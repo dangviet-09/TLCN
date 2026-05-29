@@ -12,8 +12,6 @@ router.get("/market", jobPostingController.getMarket);
 
 router.get("/", jobPostingController.getAll);
 
-router.get("/:id", jobPostingController.getById);
-
 // =============================================
 // AUTHENTICATION REQUIRED
 // =============================================
@@ -31,10 +29,25 @@ router.get("/student/applied", jobPostingController.getApplied);
 router.get("/admin/all", RoleMiddleware.checkRole(["ADMIN"]), jobPostingController.getAllAdmin);
 
 // =============================================
-// DYNAMIC /:id ROUTES (Company, Student, Admin)
+// DYNAMIC /:id/* ROUTES — MUST come BEFORE bare /:id
+// Otherwise "skill-gap", "learning-path", "apply" would be captured as :id → 404
 // =============================================
 
-router.post("/", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.create);
+router.get("/:id/skill-gap", jobPostingController.getSkillGap);
+
+router.get("/:id/learning-path", jobPostingController.getLearningPath);
+
+router.post("/:id/apply", jobPostingController.apply);
+
+router.get("/:id/applications", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getApplications);
+
+router.patch("/applications/:applicationId/status", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.updateApplicationStatus);
+
+// =============================================
+// BARE /:id — declared LAST among /:id* routes
+// =============================================
+
+router.get("/:id", jobPostingController.getById);
 
 router.put("/:id", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.update);
 
@@ -42,15 +55,9 @@ router.delete("/:id", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPosting
 
 router.patch("/:id/status", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.updateStatus);
 
-router.get("/:id/applications", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getApplications);
-
-router.patch("/applications/:applicationId/status", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.updateApplicationStatus);
-
-router.post("/:id/apply", jobPostingController.apply);
-
-router.get("/:id/skill-gap", jobPostingController.getSkillGap);
-
-router.get("/:id/learning-path", jobPostingController.getLearningPath);
+// =============================================
+// ADMIN-ONLY /admin/:id ROUTES
+// =============================================
 
 router.patch("/admin/:id/status", RoleMiddleware.checkRole(["ADMIN"]), jobPostingController.updateStatusAdmin);
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapPin, DollarSign, Search, Briefcase, Clock } from "lucide-react";
 import { apiClient } from "../../services/apiClient";
+import { formatSalary } from "../../utils/formatUtils";
 
 // ─── TypeScript Interfaces ────────────────────────────────────────────────────
 
@@ -44,15 +45,6 @@ export type JobListResponse = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
-
-const formatSalary = (min: number | null, max: number | null): string => {
-  if (min === null && max === null) return "Thoả thuận";
-  const fmt = (n: number) =>
-    n >= 1000 ? `${(n / 1000).toFixed(0)}M` : `${n}`;
-  if (min !== null && max !== null) return `${fmt(min)} - ${fmt(max)} VNĐ`;
-  if (min !== null) return `Từ ${fmt(min)} VNĐ`;
-  return `Đến ${fmt(max!)} VNĐ`;
-};
 
 const employmentTypeLabels: Record<Job["employmentType"], string> = {
   FULL_TIME: "Toàn thời gian",
@@ -190,7 +182,7 @@ const JobMarketPage: React.FC = () => {
                     )}
                     <div className="flex items-center gap-2 text-gray-500 text-sm">
                       <DollarSign className="w-4 h-4 flex-shrink-0" />
-                      <span>{formatSalary(job.salaryMin, job.salaryMax)}</span>
+                      <span>{formatSalary(job?.salaryMin, job?.salaryMax)}</span>
                     </div>
                     {job.deadline && (
                       <div className="flex items-center gap-2 text-gray-500 text-sm">

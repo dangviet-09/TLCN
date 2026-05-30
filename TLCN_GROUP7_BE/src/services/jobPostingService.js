@@ -185,7 +185,7 @@ class JobPostingService {
       include: [
         { model: db.Company, as: 'company', attributes: ['id', 'companyName'], required: false }
       ],
-      attributes: ['id', 'title', 'location', 'employmentType', 'experienceLevel', 'status', 'skillRequirements']
+      attributes: ['id', 'title', 'location', 'salaryMin', 'salaryMax', 'employmentType', 'experienceLevel', 'status', 'skillRequirements', 'deadline', 'viewCount']
     });
 
     return { total: count, page, limit, data: rows };

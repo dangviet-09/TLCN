@@ -12,8 +12,12 @@ import {
   Star,
   ArrowLeft,
   Loader2,
+  Pencil,
+  LogIn,
 } from "lucide-react";
 import { apiClient } from "../../services/apiClient";
+import { useAuth } from "../../contexts/AuthContext";
+import { formatSalary } from "../../utils/formatUtils";
 
 // ─── TypeScript Interfaces ────────────────────────────────────────────────────
 
@@ -96,15 +100,6 @@ const experienceLabels: Record<Job["experienceLevel"], string> = {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const formatSalary = (min: number | null, max: number | null): string => {
-  if (min === null && max === null) return "Thoả thuận";
-  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}M` : `${n}`);
-  if (min !== null && max !== null)
-    return `${fmt(min)} - ${fmt(max)} VNĐ`;
-  if (min !== null) return `Từ ${fmt(min)} VNĐ`;
-  return `Đến ${fmt(max!)} VNĐ`;
-};
-
 const MatchProgress = ({ percentage }: { percentage: number }) => {
   const clamped = Math.min(100, Math.max(0, percentage));
   const color =
@@ -154,6 +149,7 @@ const MatchProgress = ({ percentage }: { percentage: number }) => {
 const JobDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,26 +158,25 @@ const JobDetailPage: React.FC = () => {
   const [skillGap, setSkillGap] = useState<SkillGapResponse | null>(null);
   const [learningPath, setLearningPath] = useState<LearningPathResponse | null>(null);
 
+  // Derived role flags — always safe with Optional Chaining
+  const isStudent = user?.role === "STUDENT";
+  const isCompany = user?.role === "COMPANY";
+  // Only show Edit button if the logged-in company owns this job
+  // user.companyId = companies.id (bảng Company.id), job.companyId = companies.id → so sánh đúng
+  const canEditJob = isCompany && Boolean(job?.companyId) && user?.companyId === job?.companyId;
+  // Show apply CTA: only for authenticated students
+  const showApplyCTA = isStudent;
+  const showLoginToApplyCTA = !user;
+
   useEffect(() => {
     if (!id) return;
 
-    const fetchAll = async () => {
+    const fetchJob = async () => {
       try {
         setLoading(true);
         setError(null);
-
-        const [jobRes, skillGapRes, learningPathRes] = await Promise.all([
-          apiClient.get<JobDetailResponse>(`/jobs/${id}`),
-          apiClient.get<SkillGapResponse>(`/jobs/${id}/skill-gap`),
-          apiClient.get<LearningPathResponse>(`/jobs/${id}/learning-path`),
-        ]);
-
-        // BE trả trực tiếp: data = Job
+        const jobRes = await apiClient.get<JobDetailResponse>(`/jobs/${id}`);
         setJob(jobRes ?? null);
-        // BE trả trực tiếp: data = { required, niceToHave, matchPercentage }
-        setSkillGap(skillGapRes ?? null);
-        // BE trả trực tiếp: data = { mustLearn, niceToKnow }
-        setLearningPath(learningPathRes ?? null);
       } catch (err: any) {
         const msg =
           err?.response?.status === 404
@@ -190,14 +185,43 @@ const JobDetailPage: React.FC = () => {
             ? "Vui lòng đăng nhập để xem chi tiết."
             : "Không thể tải thông tin việc làm.";
         setError(msg);
+        setJob(null);
         console.error("JobDetailPage fetch error:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAll();
-  }, [id]);
+    // Only fetch skill-gap and learning-path for STUDENT role
+    const fetchSkillGap = async () => {
+      try {
+        const data = await apiClient.get<SkillGapResponse>(`/jobs/${id}/skill-gap`);
+        setSkillGap(data ?? null);
+      } catch {
+        setSkillGap(null);
+      }
+    };
+
+    const fetchLearningPath = async () => {
+      try {
+        const data = await apiClient.get<LearningPathResponse>(`/jobs/${id}/learning-path`);
+        setLearningPath(data ?? null);
+      } catch {
+        setLearningPath(null);
+      }
+    };
+
+    fetchJob();
+    // Fire-and-forget: these are non-blocking, role-guarded
+    if (isStudent) {
+      fetchSkillGap();
+      fetchLearningPath();
+    } else {
+      // Non-student / Guest: clear stale analysis data
+      setSkillGap(null);
+      setLearningPath(null);
+    }
+  }, [id, isStudent]);
 
   if (loading) {
     return (
@@ -357,7 +381,7 @@ const JobDetailPage: React.FC = () => {
             {/* Header Card */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="flex-1">
                   <h1 className="text-2xl font-bold text-gray-900 mb-1">
                     {job?.title ?? "—"}
                   </h1>
@@ -365,15 +389,27 @@ const JobDetailPage: React.FC = () => {
                     {job?.company?.companyName ?? "—"}
                   </p>
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    job?.status === "OPEN"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {job?.status === "OPEN" ? "Đang tuyển" : "Đã đóng"}
-                </span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Edit button: only for the owning COMPANY */}
+                  {canEditJob && (
+                    <button
+                      onClick={() => navigate(`/company/jobs/${job?.id}/edit`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Chỉnh sửa
+                    </button>
+                  )}
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      job?.status === "OPEN"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {job?.status === "OPEN" ? "Đang tuyển" : "Đã đóng"}
+                  </span>
+                </div>
               </div>
 
               {/* Quick stats */}
@@ -386,7 +422,7 @@ const JobDetailPage: React.FC = () => {
                 )}
                 <div className="flex items-center gap-2 text-gray-600 text-sm">
                   <DollarSign className="w-4 h-4 text-gray-400" />
-                  <span>{formatSalary(job?.salaryMin ?? null, job?.salaryMax ?? null)}</span>
+                  <span>{formatSalary(job?.salaryMin, job?.salaryMax)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-gray-600 text-sm">
                   <Briefcase className="w-4 h-4 text-gray-400" />
@@ -417,11 +453,21 @@ const JobDetailPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* Apply CTA */}
+              {/* Apply CTA — role-aware */}
               <div className="mt-5 pt-5 border-t border-gray-100">
-                <button className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm">
-                  Ứng tuyển ngay
-                </button>
+                {showApplyCTA ? (
+                  <button className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm">
+                    Ứng tuyển ngay
+                  </button>
+                ) : showLoginToApplyCTA ? (
+                  <button
+                    onClick={() => navigate("/signin")}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Đăng nhập để ứng tuyển
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -463,243 +509,246 @@ const JobDetailPage: React.FC = () => {
           </div>
 
           {/* ─── RIGHT: Sidebar ──────────────────────────────── */}
-          <div className="space-y-6">
-            {/* Skill Gap Dashboard */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-5">
-                Phân tích kỹ năng
-              </h2>
+          {/* Only show analysis sidebar for STUDENT role */}
+          {isStudent && (
+            <div className="space-y-6">
+              {/* Skill Gap Dashboard */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900 mb-5">
+                  Phân tích kỹ năng
+                </h2>
 
-              {/* Match Progress Circle */}
-              <div className="flex justify-center mb-6">
-                <MatchProgress percentage={matchPercentage} />
-              </div>
+                {/* Match Progress Circle */}
+                <div className="flex justify-center mb-6">
+                  <MatchProgress percentage={matchPercentage} />
+                </div>
 
-              {/* Required Skills */}
-              {requiredSkills.length > 0 && (
-                <div className="mb-5">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
-                    Bắt buộc
-                  </h3>
-                  <div className="space-y-2">
-                    {requiredSkills.map((skill, idx) => {
-                      const matched = skill.matched ?? false;
-                      return (
-                        <div
-                          key={idx}
-                          className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
-                            matched
-                              ? "bg-green-50 border border-green-200"
-                              : "bg-red-50 border border-red-200"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {matched ? (
-                              <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                            )}
-                            <span
-                              className={`font-medium truncate ${
-                                matched ? "text-green-800" : "text-red-800"
-                              }`}
-                            >
-                              {skill.skillName ?? "—"}
-                            </span>
-                          </div>
-                          <span
-                            className={`text-xs font-medium ml-2 flex-shrink-0 ${
-                              matched ? "text-green-600" : "text-red-500"
+                {/* Required Skills */}
+                {requiredSkills.length > 0 && (
+                  <div className="mb-5">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+                      Bắt buộc
+                    </h3>
+                    <div className="space-y-2">
+                      {requiredSkills.map((skill, idx) => {
+                        const matched = skill.matched ?? false;
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
+                              matched
+                                ? "bg-green-50 border border-green-200"
+                                : "bg-red-50 border border-red-200"
                             }`}
                           >
-                            {matched ? (
-                              skill.proficiency != null
-                                ? `${skill.proficiency} / ${skill.minProficiency ?? "?"}`
-                                : "Đạt"
-                            ) : (
-                              <>
-                                {skill.proficiency ?? 0}
-                                {skill.minProficiency != null
-                                  ? ` / ${skill.minProficiency}`
-                                  : ""}
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Nice to Have */}
-              {niceToHaveSkills.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
-                    Là điểm cộng
-                  </h3>
-                  <div className="space-y-2">
-                    {niceToHaveSkills.map((skill, idx) => {
-                      const matched = skill.matched ?? false;
-                      return (
-                        <div
-                          key={idx}
-                          className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
-                            matched
-                              ? "bg-blue-50 border border-blue-200"
-                              : "bg-gray-50 border border-gray-200"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {matched ? (
-                              <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            )}
+                            <div className="flex items-center gap-2 min-w-0">
+                              {matched ? (
+                                <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                              )}
+                              <span
+                                className={`font-medium truncate ${
+                                  matched ? "text-green-800" : "text-red-800"
+                                }`}
+                              >
+                                {skill.skillName ?? "—"}
+                              </span>
+                            </div>
                             <span
-                              className={`font-medium truncate ${
-                                matched ? "text-blue-800" : "text-gray-500"
+                              className={`text-xs font-medium ml-2 flex-shrink-0 ${
+                                matched ? "text-green-600" : "text-red-500"
                               }`}
                             >
-                              {skill.skillName ?? "—"}
+                              {matched ? (
+                                skill.proficiency != null
+                                  ? `${skill.proficiency} / ${skill.minProficiency ?? "?"}`
+                                  : "Đạt"
+                              ) : (
+                                <>
+                                  {skill.proficiency ?? 0}
+                                  {skill.minProficiency != null
+                                    ? ` / ${skill.minProficiency}`
+                                    : ""}
+                                </>
+                              )}
                             </span>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {requiredSkills.length === 0 && niceToHaveSkills.length === 0 && (
-                <p className="text-gray-400 text-sm text-center">
-                  {skillGap === null
-                    ? "Đang phân tích kỹ năng..."
-                    : "Không có dữ liệu kỹ năng."}
-                </p>
-              )}
-            </div>
+                {/* Nice to Have */}
+                {niceToHaveSkills.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+                      Là điểm cộng
+                    </h3>
+                    <div className="space-y-2">
+                      {niceToHaveSkills.map((skill, idx) => {
+                        const matched = skill.matched ?? false;
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
+                              matched
+                                ? "bg-blue-50 border border-blue-200"
+                                : "bg-gray-50 border border-gray-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {matched ? (
+                                <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              )}
+                              <span
+                                className={`font-medium truncate ${
+                                  matched ? "text-blue-800" : "text-gray-500"
+                                }`}
+                              >
+                                {skill.skillName ?? "—"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-            {/* Learning Path */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center gap-2 mb-4">
-                <GraduationCap className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Lộ trình học tập
-                </h2>
+                {requiredSkills.length === 0 && niceToHaveSkills.length === 0 && (
+                  <p className="text-gray-400 text-sm text-center">
+                    {skillGap === null
+                      ? "Đăng nhập với tài khoản sinh viên để xem phân tích kỹ năng."
+                      : "Không có dữ liệu kỹ năng."}
+                  </p>
+                )}
               </div>
 
-              {mustLearn.length === 0 && niceToKnow.length === 0 ? (
-                <div className="text-center py-4">
-                  <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
-                    <CheckCircle className="w-6 h-6 text-green-600" />
-                  </div>
-                  <p className="text-gray-600 text-sm font-medium">
-                    Bạn đã có đủ kỹ năng,
-                  </p>
-                  <p className="text-gray-600 text-sm">
-                    không cần học thêm khóa nào!
-                  </p>
+              {/* Learning Path */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <GraduationCap className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Lộ trình học tập
+                  </h2>
                 </div>
-              ) : (
-                <>
-                  {/* Must Learn */}
-                  {mustLearn.length > 0 && (
-                    <div className="mb-5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Star className="w-4 h-4 text-orange-500" />
-                        <h3 className="text-sm font-semibold text-orange-700">
-                          Cần học ngay
-                        </h3>
-                      </div>
-                      <div className="space-y-3">
-                        {mustLearn.map((course, ci) => (
-                          <div
-                            key={ci}
-                            className="border border-orange-200 bg-orange-50 rounded-lg p-3"
-                          >
-                            <p className="font-medium text-gray-900 text-sm mb-1">
-                              {course.courseTitle ?? "—"}
-                            </p>
-                            {course.lessons && course.lessons.length > 0 ? (
-                              <ul className="space-y-1">
-                                {course.lessons.map((lesson, li) => (
-                                  <li
-                                    key={li}
-                                    className="text-xs text-gray-500 flex items-center gap-1"
-                                  >
-                                    <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                                      {li + 1}
-                                    </span>
-                                    {lesson.title ?? "—"}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            <button
-                              onClick={() =>
-                                navigate(`/courses/${course.courseId}`)
-                              }
-                              className="mt-2 text-xs text-orange-600 hover:text-orange-700 font-medium"
-                            >
-                              Xem khóa học →
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Nice to Know */}
-                  {niceToKnow.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Star className="w-4 h-4 text-blue-400" />
-                        <h3 className="text-sm font-semibold text-blue-700">
-                          Nên biết
-                        </h3>
-                      </div>
-                      <div className="space-y-3">
-                        {niceToKnow.map((course, ci) => (
-                          <div
-                            key={ci}
-                            className="border border-blue-200 bg-blue-50 rounded-lg p-3"
-                          >
-                            <p className="font-medium text-gray-900 text-sm mb-1">
-                              {course.courseTitle ?? "—"}
-                            </p>
-                            {course.lessons && course.lessons.length > 0 ? (
-                              <ul className="space-y-1">
-                                {course.lessons.map((lesson, li) => (
-                                  <li
-                                    key={li}
-                                    className="text-xs text-gray-500 flex items-center gap-1"
-                                  >
-                                    <span className="w-4 h-4 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                                      {li + 1}
-                                    </span>
-                                    {lesson.title ?? "—"}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            <button
-                              onClick={() =>
-                                navigate(`/courses/${course.courseId}`)
-                              }
-                              className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              Xem khóa học →
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                {mustLearn.length === 0 && niceToKnow.length === 0 ? (
+                  <div className="text-center py-4">
+                    <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
+                      <CheckCircle className="w-6 h-6 text-green-600" />
                     </div>
-                  )}
-                </>
-              )}
+                    <p className="text-gray-600 text-sm font-medium">
+                      Bạn đã có đủ kỹ năng,
+                    </p>
+                    <p className="text-gray-600 text-sm">
+                      không cần học thêm khóa nào!
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Must Learn */}
+                    {mustLearn.length > 0 && (
+                      <div className="mb-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Star className="w-4 h-4 text-orange-500" />
+                          <h3 className="text-sm font-semibold text-orange-700">
+                            Cần học ngay
+                          </h3>
+                        </div>
+                        <div className="space-y-3">
+                          {mustLearn.map((course, ci) => (
+                            <div
+                              key={ci}
+                              className="border border-orange-200 bg-orange-50 rounded-lg p-3"
+                            >
+                              <p className="font-medium text-gray-900 text-sm mb-1">
+                                {course.courseTitle ?? "—"}
+                              </p>
+                              {course.lessons && course.lessons.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {course.lessons.map((lesson, li) => (
+                                    <li
+                                      key={li}
+                                      className="text-xs text-gray-500 flex items-center gap-1"
+                                    >
+                                      <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                        {li + 1}
+                                      </span>
+                                      {lesson.title ?? "—"}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                              <button
+                                onClick={() =>
+                                  navigate(`/courses/${course.courseId}`)
+                                }
+                                className="mt-2 text-xs text-orange-600 hover:text-orange-700 font-medium"
+                              >
+                                Xem khóa học →
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Nice to Know */}
+                    {niceToKnow.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Star className="w-4 h-4 text-blue-400" />
+                          <h3 className="text-sm font-semibold text-blue-700">
+                            Nên biết
+                          </h3>
+                        </div>
+                        <div className="space-y-3">
+                          {niceToKnow.map((course, ci) => (
+                            <div
+                              key={ci}
+                              className="border border-blue-200 bg-blue-50 rounded-lg p-3"
+                            >
+                              <p className="font-medium text-gray-900 text-sm mb-1">
+                                {course.courseTitle ?? "—"}
+                              </p>
+                              {course.lessons && course.lessons.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {course.lessons.map((lesson, li) => (
+                                    <li
+                                      key={li}
+                                      className="text-xs text-gray-500 flex items-center gap-1"
+                                    >
+                                      <span className="w-4 h-4 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                        {li + 1}
+                                      </span>
+                                      {lesson.title ?? "—"}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                              <button
+                                onClick={() =>
+                                  navigate(`/courses/${course.courseId}`)
+                                }
+                                className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                Xem khóa học →
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

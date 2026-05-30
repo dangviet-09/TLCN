@@ -29,6 +29,8 @@ import MyCoursesPage from "../../pages/Course/MyCoursesPage";
 import CompanyCourseManage from "../../pages/Company/CompanyCourseManage";
 import CompanyCourseEdit from "../../pages/Company/CompanyCourseEdit";
 import CompanyJobManage from "../../pages/Company/CompanyJobManage";
+import CompanyJobForm from "../../pages/Company/CompanyJobForm";
+import CompanyJobApplications from "../../pages/Company/CompanyJobApplications";
 import CompanyCareerTestManage from "../../pages/Company/CompanyCareerTestManage";
 // Phase 5: Admin pages
 import AdminCoursePage from "../../pages/Admin/AdminCoursePage";
@@ -86,6 +88,9 @@ const AppRoutes: React.FC = () => {
       <Route path="/company/courses" element={<CompanyCourseManage />} />
       <Route path="/company/courses/:id/edit" element={<CompanyCourseEdit />} />
       <Route path="/company/jobs" element={<CompanyJobManage />} />
+      <Route path="/company/jobs/create" element={<CompanyJobForm />} />
+      <Route path="/company/jobs/:id/edit" element={<CompanyJobForm />} />
+      <Route path="/company/jobs/:id/applications" element={<CompanyJobApplications />} />
       <Route path="/company/career-tests" element={<CompanyCareerTestManage />} />
 
       {/* Phase 5: Admin routes */}

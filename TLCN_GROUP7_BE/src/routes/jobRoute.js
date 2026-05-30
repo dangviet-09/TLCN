@@ -21,7 +21,7 @@ router.use(AuthMiddleware.verifyToken);
 // =============================================
 // STATIC ROUTES (must come before dynamic /:id)
 // =============================================
-
+router.post("/", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.create);
 router.get("/company/owned", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getOwned);
 
 router.get("/student/applied", jobPostingController.getApplied);

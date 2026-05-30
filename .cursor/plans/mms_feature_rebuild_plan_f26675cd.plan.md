@@ -31,32 +31,38 @@ isProject: false
 #### `Course` (mở rộng từ `CareerPath` — đổi tên context trong code)
 
 File gốc: `TLCN_GROUP7_BE/src/models/careerPathModel.js`
+
 - Thêm 4 cột mới (giữ nguyên tên bảng `CareerPaths` trong DB, chỉ đổi tên model variable trong code):
 
-| Cột | Kiểu | Mô tả |
-|-----|------|-------|
-| `level` | ENUM('BEGINNER','INTERMEDIATE','ADVANCED') | Cấp độ khoá học |
-| `category` | STRING | Danh mục (VD: Backend, Frontend, DevOps…) |
-| `publishedAt` | DATE | Thời điểm publish |
-| `isFeatured` | TINYINT(1), default 0 | Nổi bật trên trang chủ |
+
+| Cột           | Kiểu                                       | Mô tả                                     |
+| ------------- | ------------------------------------------ | ----------------------------------------- |
+| `level`       | ENUM('BEGINNER','INTERMEDIATE','ADVANCED') | Cấp độ khoá học                           |
+| `category`    | STRING                                     | Danh mục (VD: Backend, Frontend, DevOps…) |
+| `publishedAt` | DATE                                       | Thời điểm publish                         |
+| `isFeatured`  | TINYINT(1), default 0                      | Nổi bật trên trang chủ                    |
+
 
 #### `Lesson` (mở rộng — gộp toàn bộ cột của CourseLesson)
 
 File gốc: `TLCN_GROUP7_BE/src/models/lessonModel.js`
 Thêm 8 cột mới vào bảng `Lessons` hiện có (Lesson vẫn giữ vai trò ordering/grouping trong CareerPath, đồng thời chứa toàn bộ nội dung bài giảng):
 
-| Cột | Kiểu | Mô tả |
-|-----|------|-------|
-| `type` | ENUM('TASK','THEORY') | Loại bài giảng |
-| `theoryContent` | TEXT | Nội dung lý thuyết (bài đọc/blog-style) |
-| `taskDescription` | TEXT | Mô tả đề bài task |
-| `submissionFields` | JSON | Cấu hình các ô nộp bài (xem bên dưới) |
-| `attachments` | JSON | Danh sách file đính kèm {name, url, type, size} |
-| `referenceLinks` | JSON | Danh sách link tham khảo {title, url} |
-| `rubric` | TEXT | Rubric chấm điểm (tham chiếu cho AI) |
-| `createdAt/updatedAt` | | Sequelize tự tạo |
+
+| Cột                   | Kiểu                  | Mô tả                                           |
+| --------------------- | --------------------- | ----------------------------------------------- |
+| `type`                | ENUM('TASK','THEORY') | Loại bài giảng                                  |
+| `theoryContent`       | TEXT                  | Nội dung lý thuyết (bài đọc/blog-style)         |
+| `taskDescription`     | TEXT                  | Mô tả đề bài task                               |
+| `submissionFields`    | JSON                  | Cấu hình các ô nộp bài (xem bên dưới)           |
+| `attachments`         | JSON                  | Danh sách file đính kèm {name, url, type, size} |
+| `referenceLinks`      | JSON                  | Danh sách link tham khảo {title, url}           |
+| `rubric`              | TEXT                  | Rubric chấm điểm (tham chiếu cho AI)            |
+| `createdAt/updatedAt` |                       | Sequelize tự tạo                                |
+
 
 **Cấu trúc `submissionFields` (JSON):**
+
 ```json
 [
   { "id": "uuid", "type": "SQL_QUERY", "label": "Viết SQL truy vấn", "placeholder": "SELECT * FROM...", "required": true },
@@ -67,40 +73,45 @@ Thêm 8 cột mới vào bảng `Lessons` hiện có (Lesson vẫn giữ vai tr�
 
 #### `CourseSubmission` — Bảng mới cho bài nộp lesson
 
-| Cột | Kiểu | Mô tả |
-|-----|------|-------|
-| `id` | UUID (PK) | — |
-| `studentId` | UUID (FK → Student) | Sinh viên nộp bài |
-| `lessonId` | UUID (FK → Lesson) | Bài học được nộp |
-| `careerPathId` | UUID (FK → CareerPath) | Khoá học chứa bài này |
-| `submissionData` | JSON | Dữ liệu các ô nộp bài {fieldId: value} |
-| `score` | DECIMAL(5,2) | Điểm số |
-| `aiGrading` | JSON | Phân tích AI {score, feedback, strengths, improvements} |
-| `status` | ENUM('SUBMITTED','GRADED') | Trạng thái |
-| `submittedAt` | DATE | Thời điểm nộp |
-| `gradedAt` | DATE | Thời điểm chấm điểm |
+
+| Cột              | Kiểu                       | Mô tả                                                   |
+| ---------------- | -------------------------- | ------------------------------------------------------- |
+| `id`             | UUID (PK)                  | —                                                       |
+| `studentId`      | UUID (FK → Student)        | Sinh viên nộp bài                                       |
+| `lessonId`       | UUID (FK → Lesson)         | Bài học được nộp                                        |
+| `careerPathId`   | UUID (FK → CareerPath)     | Khoá học chứa bài này                                   |
+| `submissionData` | JSON                       | Dữ liệu các ô nộp bài {fieldId: value}                  |
+| `score`          | DECIMAL(5,2)               | Điểm số                                                 |
+| `aiGrading`      | JSON                       | Phân tích AI {score, feedback, strengths, improvements} |
+| `status`         | ENUM('SUBMITTED','GRADED') | Trạng thái                                              |
+| `submittedAt`    | DATE                       | Thời điểm nộp                                           |
+| `gradedAt`       | DATE                       | Thời điểm chấm điểm                                     |
+
 
 #### `JobPosting` — Bảng mới hoàn toàn
 
-| Cột | Kiểu | Mô tả |
-|-----|------|-------|
-| `id` | UUID (PK) | — |
-| `companyId` | UUID (FK → Company) | Doanh nghiệp đăng |
-| `title` | STRING | Tên vị trí |
-| `description` | TEXT | Mô tả công việc |
-| `skillRequirements` | JSON | Danh sách skill yêu cầu (xem bên dưới) |
-| `location` | STRING | Địa điểm |
-| `salaryMin` | DECIMAL | Lương tối thiểu |
-| `salaryMax` | DECIMAL | Lương tối đa |
-| `employmentType` | ENUM('FULL_TIME','PART_TIME','INTERNSHIP','CONTRACT') | Loại hình |
-| `experienceLevel` | ENUM('FRESHER','JUNIOR','MIDDLE','SENIOR') | Cấp bậc kinh nghiệm |
-| `deadline` | DATE | Hạn nộp |
-| `requiredDocuments` | JSON | Danh sách document yêu cầu |
-| `status` | ENUM('OPEN','CLOSED','DRAFT') | Trạng thái |
-| `viewCount` | INTEGER, default 0 | Lượt xem |
-| `createdAt/updatedAt` | | Sequelize tự tạo |
+
+| Cột                   | Kiểu                                                  | Mô tả                                  |
+| --------------------- | ----------------------------------------------------- | -------------------------------------- |
+| `id`                  | UUID (PK)                                             | —                                      |
+| `companyId`           | UUID (FK → Company)                                   | Doanh nghiệp đăng                      |
+| `title`               | STRING                                                | Tên vị trí                             |
+| `description`         | TEXT                                                  | Mô tả công việc                        |
+| `skillRequirements`   | JSON                                                  | Danh sách skill yêu cầu (xem bên dưới) |
+| `location`            | STRING                                                | Địa điểm                               |
+| `salaryMin`           | DECIMAL                                               | Lương tối thiểu                        |
+| `salaryMax`           | DECIMAL                                               | Lương tối đa                           |
+| `employmentType`      | ENUM('FULL_TIME','PART_TIME','INTERNSHIP','CONTRACT') | Loại hình                              |
+| `experienceLevel`     | ENUM('FRESHER','JUNIOR','MIDDLE','SENIOR')            | Cấp bậc kinh nghiệm                    |
+| `deadline`            | DATE                                                  | Hạn nộp                                |
+| `requiredDocuments`   | JSON                                                  | Danh sách document yêu cầu             |
+| `status`              | ENUM('OPEN','CLOSED','DRAFT')                         | Trạng thái                             |
+| `viewCount`           | INTEGER, default 0                                    | Lượt xem                               |
+| `createdAt/updatedAt` |                                                       | Sequelize tự tạo                       |
+
 
 **Cấu trúc `skillRequirements` (JSON):**
+
 ```json
 [
   { "skillName": "Node.js", "level": "REQUIRED", "minProficiency": 3 },
@@ -111,14 +122,16 @@ Thêm 8 cột mới vào bảng `Lessons` hiện có (Lesson vẫn giữ vai tr�
 
 #### `JobApplication` — Bảng mới cho đơn ứng tuyển
 
-| Cột | Kiểu | Mô tả |
-|-----|------|-------|
-| `id` | UUID (PK) | — |
-| `jobPostingId` | UUID (FK → JobPosting) | Job ứng tuyển |
-| `studentId` | UUID (FK → Student) | Sinh viên ứng tuyển |
-| `coverLetter` | TEXT | Thư ứng tuyển |
-| `status` | ENUM('PENDING','REVIEWING','SHORTLISTED','REJECTED','ACCEPTED') | Trạng thái |
-| `appliedAt` | DATE | Thời điểm nộp |
+
+| Cột            | Kiểu                                                            | Mô tả               |
+| -------------- | --------------------------------------------------------------- | ------------------- |
+| `id`           | UUID (PK)                                                       | —                   |
+| `jobPostingId` | UUID (FK → JobPosting)                                          | Job ứng tuyển       |
+| `studentId`    | UUID (FK → Student)                                             | Sinh viên ứng tuyển |
+| `coverLetter`  | TEXT                                                            | Thư ứng tuyển       |
+| `status`       | ENUM('PENDING','REVIEWING','SHORTLISTED','REJECTED','ACCEPTED') | Trạng thái          |
+| `appliedAt`    | DATE                                                            | Thời điểm nộp       |
+
 
 **Unique constraint:** `(jobPostingId, studentId)` — mỗi SV chỉ nộp 1 lần/job.
 
@@ -142,26 +155,32 @@ erDiagram
     Student ||--o{ JobApplication : "applies"
 ```
 
+
+
 **Cụ thể từng quan hệ cần khai báo trong Sequelize model files:**
 
-| Model | Association |
-|-------|------------|
+
+| Model                 | Association                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
 | `CareerPath` (Course) | `hasMany(Lesson)`, `hasMany(StudentProgress)`, `hasMany(CourseSubmission)` |
-| `Lesson` | `belongsTo(CareerPath)`, `hasMany(CourseSubmission)` |
-| `CourseSubmission` | `belongsTo(Student)`, `belongsTo(Lesson)`, `belongsTo(CareerPath)` |
-| `JobPosting` | `belongsTo(Company)`, `hasMany(JobApplication)` |
-| `JobApplication` | `belongsTo(JobPosting)`, `belongsTo(Student)` |
-| `Student` | `hasMany(CourseSubmission)`, `hasMany(JobApplication)` |
+| `Lesson`              | `belongsTo(CareerPath)`, `hasMany(CourseSubmission)`                       |
+| `CourseSubmission`    | `belongsTo(Student)`, `belongsTo(Lesson)`, `belongsTo(CareerPath)`         |
+| `JobPosting`          | `belongsTo(Company)`, `hasMany(JobApplication)`                            |
+| `JobApplication`      | `belongsTo(JobPosting)`, `belongsTo(Student)`                              |
+| `Student`             | `hasMany(CourseSubmission)`, `hasMany(JobApplication)`                     |
+
 
 ---
 
 ### 1.3 Sửa đổi model hiện có
 
-| File | Thay đổi |
-|------|---------|
+
+| File                        | Thay đổi                                                               |
+| --------------------------- | ---------------------------------------------------------------------- |
 | `studentTestResultModel.js` | Thêm `lessonId` (FK nullable) — để test lesson có thể dùng chung model |
-| `studentProgressModel.js` | Thêm `currentLessonId` — track bài học hiện tại (khóa tiến độ) |
-| `studentProgressModel.js` | Thêm `lastCompletedLessonId` — bài cuối đã hoàn thành |
+| `studentProgressModel.js`   | Thêm `currentLessonId` — track bài học hiện tại (khóa tiến độ)         |
+| `studentProgressModel.js`   | Thêm `lastCompletedLessonId` — bài cuối đã hoàn thành                  |
+
 
 ---
 
@@ -170,41 +189,48 @@ erDiagram
 ### 2.1 Course Feature (Mở rộng từ CareerPath)
 
 #### Authentication Middleware
+
 Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). Role check được xử lý trong controller.
 
 #### Company/Admin endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `POST` | `/courses` | `{title, description, level, category, image, status}` + file ảnh | Course object |
-| `PUT` | `/courses/:id` | `{title, description, level, category, status}` | Updated course |
-| `DELETE` | `/courses/:id` | — | `{message}` |
-| `POST` | `/courses/:courseId/lessons` | `{title, order}` | Lesson object |
-| `PUT` | `/courses/:courseId/lessons/:lessonId` | `{title, order}` | Updated lesson |
-| `DELETE` | `/courses/:courseId/lessons/:lessonId` | — | `{message}` |
-| `PUT` | `/courses/:courseId/lessons/:lessonId/content` | `{type, theoryContent, taskDescription, submissionFields, attachments, referenceLinks, rubric}` | Lesson object (with extended fields) |
-| `GET` | `/courses/owned` | `page, limit` (auth: COMPANY/ADMIN) | Paginated list of company's courses |
-| `PATCH` | `/courses/:id/publish` | — | Updated course with `publishedAt` |
+
+| Method   | Endpoint                                       | Input                                                                                           | Output                               |
+| -------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `POST`   | `/courses`                                     | `{title, description, level, category, image, status}` + file ảnh                               | Course object                        |
+| `PUT`    | `/courses/:id`                                 | `{title, description, level, category, status}`                                                 | Updated course                       |
+| `DELETE` | `/courses/:id`                                 | —                                                                                               | `{message}`                          |
+| `POST`   | `/courses/:courseId/lessons`                   | `{title, order}`                                                                                | Lesson object                        |
+| `PUT`    | `/courses/:courseId/lessons/:lessonId`         | `{title, order}`                                                                                | Updated lesson                       |
+| `DELETE` | `/courses/:courseId/lessons/:lessonId`         | —                                                                                               | `{message}`                          |
+| `PUT`    | `/courses/:courseId/lessons/:lessonId/content` | `{type, theoryContent, taskDescription, submissionFields, attachments, referenceLinks, rubric}` | Lesson object (with extended fields) |
+| `GET`    | `/courses/owned`                               | `page, limit` (auth: COMPANY/ADMIN)                                                             | Paginated list of company's courses  |
+| `PATCH`  | `/courses/:id/publish`                         | —                                                                                               | Updated course with `publishedAt`    |
+
 
 #### Student endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/courses` | `page, limit, category, level, search` | Paginated public courses |
-| `GET` | `/courses/:id` | — | Course detail + lessons + first incomplete lesson |
-| `POST` | `/courses/:id/enroll` | — | StudentProgress object |
-| `GET` | `/courses/:id/progress` | — | Progress with all lesson statuses |
-| `GET` | `/courses/:courseId/lessons/:lessonId` | — | Lesson detail (with type, submissionFields, attachments, rubric) |
-| `POST` | `/courses/:courseId/lessons/:lessonId/submit` | `{submissionData}` | CourseSubmission object + AI grading |
-| `POST` | `/courses/:courseId/lessons/:lessonId/complete` | — | Updated StudentProgress (theory lesson — đánh dấu hoàn thành) |
+
+| Method | Endpoint                                        | Input                                  | Output                                                           |
+| ------ | ----------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
+| `GET`  | `/courses`                                      | `page, limit, category, level, search` | Paginated public courses                                         |
+| `GET`  | `/courses/:id`                                  | —                                      | Course detail + lessons + first incomplete lesson                |
+| `POST` | `/courses/:id/enroll`                           | —                                      | StudentProgress object                                           |
+| `GET`  | `/courses/:id/progress`                         | —                                      | Progress with all lesson statuses                                |
+| `GET`  | `/courses/:courseId/lessons/:lessonId`          | —                                      | Lesson detail (with type, submissionFields, attachments, rubric) |
+| `POST` | `/courses/:courseId/lessons/:lessonId/submit`   | `{submissionData}`                     | CourseSubmission object + AI grading                             |
+| `POST` | `/courses/:courseId/lessons/:lessonId/complete` | —                                      | Updated StudentProgress (theory lesson — đánh dấu hoàn thành)    |
+
 
 #### Admin endpoints (ngoài các endpoint Company):
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/admin/courses` | `page, limit, status` | All courses (kể cả chưa publish) |
-| `PATCH` | `/admin/courses/:id` | `{status}` | Updated course |
-| `DELETE` | `/admin/courses/:id` | — | `{message}` |
+
+| Method   | Endpoint             | Input                 | Output                           |
+| -------- | -------------------- | --------------------- | -------------------------------- |
+| `GET`    | `/admin/courses`     | `page, limit, status` | All courses (kể cả chưa publish) |
+| `PATCH`  | `/admin/courses/:id` | `{status}`            | Updated course                   |
+| `DELETE` | `/admin/courses/:id` | —                     | `{message}`                      |
+
 
 ---
 
@@ -212,15 +238,18 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 
 #### Company/Admin endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `POST` | `/career-tests` | `{title, description, questions[], careerPathId?}` | CareerTest object |
-| `PUT` | `/career-tests/:id` | `{title, description, questions[]}` | Updated CareerTest |
-| `DELETE` | `/career-tests/:id` | — | `{message}` |
-| `GET` | `/career-tests/owned` | `page, limit` | Company's owned career tests |
-| `GET` | `/career-tests/:id/results` | — | All student results for this test |
+
+| Method   | Endpoint                    | Input                                              | Output                            |
+| -------- | --------------------------- | -------------------------------------------------- | --------------------------------- |
+| `POST`   | `/career-tests`             | `{title, description, questions[], careerPathId?}` | CareerTest object                 |
+| `PUT`    | `/career-tests/:id`         | `{title, description, questions[]}`                | Updated CareerTest                |
+| `DELETE` | `/career-tests/:id`         | —                                                  | `{message}`                       |
+| `GET`    | `/career-tests/owned`       | `page, limit`                                      | Company's owned career tests      |
+| `GET`    | `/career-tests/:id/results` | —                                                  | All student results for this test |
+
 
 **Cấu trúc `questions[]` trong input:**
+
 ```json
 [
   { "type": "MULTIPLE_CHOICE", "question": "...", "options": ["A","B","C","D"], "correctAnswer": "B", "points": 10 },
@@ -230,14 +259,17 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 
 #### Student endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/career-tests` | `page, limit, search` | Paginated career tests |
-| `GET` | `/career-tests/:id` | — | Test detail (hide correctAnswer) |
-| `POST` | `/career-tests/:id/enroll` | — | StudentProgress object |
-| `POST` | `/career-tests/:id/submit` | `{answers[]}` | AI grading result + suggestions |
+
+| Method | Endpoint                   | Input                 | Output                           |
+| ------ | -------------------------- | --------------------- | -------------------------------- |
+| `GET`  | `/career-tests`            | `page, limit, search` | Paginated career tests           |
+| `GET`  | `/career-tests/:id`        | —                     | Test detail (hide correctAnswer) |
+| `POST` | `/career-tests/:id/enroll` | —                     | StudentProgress object           |
+| `POST` | `/career-tests/:id/submit` | `{answers[]}`         | AI grading result + suggestions  |
+
 
 **Cấu trúc `answers[]` trong input:**
+
 ```json
 [
   { "questionIndex": 0, "answer": "B" },
@@ -247,11 +279,13 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 
 #### Admin endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/admin/career-tests` | `page, limit` | All career tests |
-| `PATCH` | `/admin/career-tests/:id` | `{status}` | Updated career test |
-| `DELETE` | `/admin/career-tests/:id` | — | `{message}` |
+
+| Method   | Endpoint                  | Input         | Output              |
+| -------- | ------------------------- | ------------- | ------------------- |
+| `GET`    | `/admin/career-tests`     | `page, limit` | All career tests    |
+| `PATCH`  | `/admin/career-tests/:id` | `{status}`    | Updated career test |
+| `DELETE` | `/admin/career-tests/:id` | —             | `{message}`         |
+
 
 ---
 
@@ -259,27 +293,32 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 
 #### Company endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `POST` | `/jobs` | `{title, description, skillRequirements[], location, salaryMin, salaryMax, employmentType, experienceLevel, deadline, requiredDocuments}` | JobPosting object |
-| `PUT` | `/jobs/:id` | Partial job object | Updated JobPosting |
-| `DELETE` | `/jobs/:id` | — | `{message}` |
-| `PATCH` | `/jobs/:id/status` | `{status}` | Updated JobPosting |
-| `GET` | `/jobs/owned` | `page, limit` | Company's posted jobs |
-| `GET` | `/jobs/:id/applications` | — | All applications for this job |
-| `PATCH` | `/jobs/applications/:applicationId` | `{status}` | Updated application |
+
+| Method   | Endpoint                            | Input                                                                                                                                     | Output                        |
+| -------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `POST`   | `/jobs`                             | `{title, description, skillRequirements[], location, salaryMin, salaryMax, employmentType, experienceLevel, deadline, requiredDocuments}` | JobPosting object             |
+| `PUT`    | `/jobs/:id`                         | Partial job object                                                                                                                        | Updated JobPosting            |
+| `DELETE` | `/jobs/:id`                         | —                                                                                                                                         | `{message}`                   |
+| `PATCH`  | `/jobs/:id/status`                  | `{status}`                                                                                                                                | Updated JobPosting            |
+| `GET`    | `/jobs/owned`                       | `page, limit`                                                                                                                             | Company's posted jobs         |
+| `GET`    | `/jobs/:id/applications`            | —                                                                                                                                         | All applications for this job |
+| `PATCH`  | `/jobs/applications/:applicationId` | `{status}`                                                                                                                                | Updated application           |
+
 
 #### Student endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/jobs` | `page, limit, search, location, experienceLevel, employmentType` | Paginated job listings |
-| `GET` | `/jobs/:id` | — | Job detail + skill gap analysis |
-| `POST` | `/jobs/:id/apply` | `{coverLetter}` | JobApplication object |
-| `GET` | `/jobs/applied` | — | Jobs student has applied to |
-| `GET` | `/jobs/:id/learning-path` | — | Suggested courses based on skill gap |
+
+| Method | Endpoint                  | Input                                                            | Output                               |
+| ------ | ------------------------- | ---------------------------------------------------------------- | ------------------------------------ |
+| `GET`  | `/jobs`                   | `page, limit, search, location, experienceLevel, employmentType` | Paginated job listings               |
+| `GET`  | `/jobs/:id`               | —                                                                | Job detail + skill gap analysis      |
+| `POST` | `/jobs/:id/apply`         | `{coverLetter}`                                                  | JobApplication object                |
+| `GET`  | `/jobs/applied`           | —                                                                | Jobs student has applied to          |
+| `GET`  | `/jobs/:id/learning-path` | —                                                                | Suggested courses based on skill gap |
+
 
 **Output của `GET /jobs/:id` (thêm trường `skillGap`):**
+
 ```json
 {
   "job": { ... },
@@ -293,6 +332,7 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 ```
 
 **Output của `GET /jobs/:id/learning-path`:**
+
 ```json
 {
   "mustLearn": [{ "courseId": "uuid", "courseTitle": "...", "lessons": [...] }],
@@ -302,17 +342,21 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 
 #### Public endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/jobs/market` | `page, limit, search` | Job listings with featured skills tags |
+
+| Method | Endpoint       | Input                 | Output                                 |
+| ------ | -------------- | --------------------- | -------------------------------------- |
+| `GET`  | `/jobs/market` | `page, limit, search` | Job listings with featured skills tags |
+
 
 #### Admin endpoints:
 
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `GET` | `/admin/jobs` | `page, limit` | All jobs |
-| `DELETE` | `/admin/jobs/:id` | — | `{message}` |
-| `PATCH` | `/admin/jobs/:id` | `{status}` | Updated job |
+
+| Method   | Endpoint          | Input         | Output      |
+| -------- | ----------------- | ------------- | ----------- |
+| `GET`    | `/admin/jobs`     | `page, limit` | All jobs    |
+| `DELETE` | `/admin/jobs/:id` | —             | `{message}` |
+| `PATCH`  | `/admin/jobs/:id` | `{status}`    | Updated job |
+
 
 ---
 
@@ -321,6 +365,7 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 #### AI cho bài TASK lesson:
 
 `POST /courses/:courseId/lessons/:lessonId/submit`
+
 - Service: Tạo prompt gửi Groq, đọc `submissionFields` + `rubric` từ Lesson để chấm từng ô
 - AI phân tích: điểm từng phần, tổng điểm, feedback, điểm mạnh, điểm cần cải thiện
 - Lưu vào `CourseSubmission.aiGrading`
@@ -328,6 +373,7 @@ Tất cả endpoint dưới đây đều dùng middleware `authenticate` (JWT). 
 #### AI chat cho từng bài học (4 vai trò):
 
 Mở rộng existing `chatService.js` — thêm param `lessonContext`:
+
 - `GET /courses/:courseId/lessons/:lessonId/chat/session` — tạo/get chat session gắn với lesson
 - `POST /courses/:courseId/lessons/:lessonId/chat/message` — gửi message với context bài học
   - System prompt chọn vai: Manager / TechLead / HR / QA
@@ -347,17 +393,20 @@ Mở rộng existing `chatService.js` — thêm param `lessonContext`:
 ### Phase 1: Database & Models (Thực hiện TRƯỚC TIÊN — nền tảng cho mọi thứ)
 
 **Bước 1.1:** Mở rộng model `Lesson` — thêm 8 cột mới
+
 - File: `TLCN_GROUP7_BE/src/models/lessonModel.js`
 - Thêm: `type`, `theoryContent`, `taskDescription`, `submissionFields`, `attachments`, `referenceLinks`, `rubric`
 - Cập nhật associations: `hasMany(CourseSubmission)`
 
 **Bước 1.2:** Tạo model `CourseSubmission`
+
 - File: `TLCN_GROUP7_BE/src/models/courseSubmissionModel.js`
 - FK: `lessonId` (→ Lesson), `studentId` (→ Student), `careerPathId` (→ CareerPath)
 - Đăng ký trong `models/index.js`
 - Khai báo đầy đủ associations
 
 **Bước 1.3:** Tạo model `JobPosting` và `JobApplication`
+
 - File: `TLCN_GROUP7_BE/src/models/jobPostingModel.js`
 - File: `TLCN_GROUP7_BE/src/models/jobApplicationModel.js`
 - Đăng ký trong `models/index.js`
@@ -374,21 +423,26 @@ Mở rộng existing `chatService.js` — thêm param `lessonContext`:
 ### Phase 2: Backend Services & Controllers
 
 **Bước 2.1:** Tạo `courseService.js` — tách từ `careerPathService.js` hiện có
+
 - Giữ nguyên logic cũ, thêm: update lesson content (PUT lesson/content), submit lesson task, complete theory lesson
 - Ownership check: Company chỉ sửa/xoá course của mình
 - Khi update lesson content: ghi trực tiếp vào các cột mới của Lesson (`type`, `theoryContent`, `taskDescription`, `submissionFields`, `attachments`, `referenceLinks`, `rubric`)
 
 **Bước 2.2:** Tạo `courseController.js` — HTTP handlers cho tất cả course endpoints
+
 - Tái sử dụng middleware `upload` đã có cho ảnh course và file đính kèm
 
 **Bước 2.3:** Tạo `careerTestService.js` — service cho career test (mở rộng từ test logic cũ)
+
 - Tạo/cập nhật questions (lưu JSON array)
 - Grading cho MULTIPLE_CHOICE + SHORT_ANSWER
 
 **Bước 2.4:** Mở rộng `testGradingService.js` — thêm method `gradeCareerTest`
+
 - Sau khi grading: gọi `aiService.searchCourses()` để gợi ý courses cải thiện
 
 **Bước 2.5:** Tạo `jobPostingService.js`
+
 - CRUD job posting với ownership check
 - `applyForJob()` — ghi JobApplication, kiểm tra chưa ứng tuyển
 - `analyzeSkillGap(studentId, jobPostingId)` — đọc skillRequirements + StudentProgress + StudentTestResult → trả skill gap
@@ -397,9 +451,11 @@ Mở rộng existing `chatService.js` — thêm param `lessonContext`:
 **Bước 2.6:** Tạo `jobPostingController.js` — HTTP handlers
 
 **Bước 2.7:** Mở rộng `aiService.js` — thêm method `gradeLessonTask(submissionData, rubric, submissionFields)`
+
 - Prompt gửi Groq: phân tích từng ô nộp, cho điểm, feedback chi tiết
 
 **Bước 2.8:** Mở rộng `chatService` (hoặc tạo `lessonChatService.js`)
+
 - Tạo chat session riêng cho từng lesson với role selection
 
 ---
@@ -416,11 +472,13 @@ Mở rộng existing `chatService.js` — thêm param `lessonContext`:
 ### Phase 4: Skill Gap & Learning Path Logic
 
 **Bước 4.1:** Hoàn thiện `analyzeSkillGap()` trong `jobPostingService.js`
+
 - Đọc `skillRequirements` từ JobPosting
 - Đọc skill history từ StudentProgress + StudentTestResult (để tạm dùng keyword matching)
 - Trả về: required skills matched/unmatched + nice-to-have
 
 **Bước 4.2:** Hoàn thiện `suggestLearningPath()` trong `jobPostingService.js`
+
 - Từ danh sách skill thiếu → gọi `aiService.searchCourses()` với keyword
 - Map course → lesson → gợi ý
 
@@ -474,3 +532,4 @@ Phase 1 (Models)
                                   │
                                   └── Phase 5 (Frontend — sau khi API xong)
 ```
+

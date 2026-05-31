@@ -82,11 +82,11 @@ class JobPostingController {
 
   async apply(req, res) {
     try {
-      const student = await studentService.getStudentByUserId(req.user.id);
-      if (!student) return ApiResponse.error(res, 'Student không tồn tại', 404);
+      const student = await db.Student.findOne({ where: { userId: req.user.id } });
+      if (!student) return ApiResponse.error(res, 'Hồ sơ sinh viên không tồn tại', 404);
 
       const { coverLetter } = req.body;
-      const result = await jobPostingService.applyForJob(student.id, req.params.id, coverLetter);
+      const result = await jobPostingService.applyForJob(req.params.id, student.id, coverLetter);
       return ApiResponse.success(res, 'Ứng tuyển thành công', result, 201);
     } catch (error) {
       return ApiResponse.error(res, error.message, 400);
@@ -95,8 +95,8 @@ class JobPostingController {
 
   async getApplied(req, res) {
     try {
-      const student = await studentService.getStudentByUserId(req.user.id);
-      if (!student) return ApiResponse.error(res, 'Student không tồn tại', 404);
+      const student = await db.Student.findOne({ where: { userId: req.user.id } });
+      if (!student) return ApiResponse.error(res, 'Hồ sơ sinh viên không tồn tại', 404);
 
       const result = await jobPostingService.getAppliedJobs(student.id);
       return ApiResponse.success(res, 'Lấy danh sách job đã ứng tuyển thành công', result);

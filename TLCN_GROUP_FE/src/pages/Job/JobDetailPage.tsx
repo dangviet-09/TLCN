@@ -15,6 +15,7 @@ import {
   Pencil,
   LogIn,
 } from "lucide-react";
+import { Modal, Form, Input, message } from "antd";
 import { apiClient } from "../../services/apiClient";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatSalary } from "../../utils/formatUtils";
@@ -158,6 +159,12 @@ const JobDetailPage: React.FC = () => {
   const [skillGap, setSkillGap] = useState<SkillGapResponse | null>(null);
   const [learningPath, setLearningPath] = useState<LearningPathResponse | null>(null);
 
+  // ── Apply Modal state ──────────────────────────────────────────
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [isApplied, setIsApplied] = useState(false);
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
+
   // Derived role flags — always safe with Optional Chaining
   const isStudent = user?.role === "STUDENT";
   const isCompany = user?.role === "COMPANY";
@@ -222,6 +229,64 @@ const JobDetailPage: React.FC = () => {
       setLearningPath(null);
     }
   }, [id, isStudent]);
+
+  // Sync isApplied from server on mount — only for STUDENT role
+  useEffect(() => {
+    if (!isStudent || !id) return;
+
+    const checkApplied = async () => {
+      try {
+        const data = await apiClient.get<Array<{ jobPostingId: string }>>("/jobs/student/applied");
+        if (Array.isArray(data) && data.some((app) => app?.jobPostingId === id)) {
+          setAppliedJobIds((prev) => new Set([...prev, id]));
+        }
+      } catch {
+        // Silently fail — do not disrupt job viewing experience
+      }
+    };
+
+    checkApplied();
+  }, [isStudent, id]);
+
+  // Update isApplied when appliedJobIds or job changes
+  useEffect(() => {
+    if (job?.id) {
+      setIsApplied(appliedJobIds.has(job.id));
+    }
+  }, [job?.id, appliedJobIds]);
+
+  // ── Apply handlers ─────────────────────────────────────────────
+  const openApplyModal = () => {
+    setApplyModalOpen(true);
+  };
+
+  const handleApplySubmit = async (values: { coverLetter?: string }) => {
+    if (!id) return;
+    try {
+      setApplyLoading(true);
+      await apiClient.post(`/jobs/${id}/apply`, { coverLetter: values.coverLetter ?? "" });
+      message.success("Ứng tuyển thành công!");
+      setApplyModalOpen(false);
+      setAppliedJobIds((prev) => new Set([...prev, id]));
+      setIsApplied(true);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.message;
+
+      if (status === 400 && serverMsg?.includes("đã ứng tuyển")) {
+        // Đã ứng tuyển trước đó → đóng modal, khoá nút
+        message.error(serverMsg);
+        setApplyModalOpen(false);
+        setAppliedJobIds((prev) => new Set([...prev, id]));
+        setIsApplied(true);
+      } else {
+        // Lỗi khác (500, network…) → giữ nguyên modal, không update state
+        message.error(serverMsg || "Ứng tuyển thất bại. Vui lòng thử lại.");
+      }
+    } finally {
+      setApplyLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -456,9 +521,21 @@ const JobDetailPage: React.FC = () => {
               {/* Apply CTA — role-aware */}
               <div className="mt-5 pt-5 border-t border-gray-100">
                 {showApplyCTA ? (
-                  <button className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm">
-                    Ứng tuyển ngay
-                  </button>
+                  isApplied ? (
+                    <button
+                      disabled
+                      className="w-full py-3 bg-gray-300 text-gray-500 font-semibold rounded-xl cursor-not-allowed"
+                    >
+                      Đã ứng tuyển
+                    </button>
+                  ) : (
+                    <button
+                      onClick={openApplyModal}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
+                    >
+                      Ứng tuyển ngay
+                    </button>
+                  )
                 ) : showLoginToApplyCTA ? (
                   <button
                     onClick={() => navigate("/signin")}
@@ -751,6 +828,61 @@ const JobDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ── Apply Modal ──────────────────────────────────────── */}
+      <Modal
+        title="Ứng tuyển việc làm"
+        open={applyModalOpen}
+        onCancel={() => {
+          setApplyModalOpen(false);
+        }}
+        footer={null}
+        width={560}
+        destroyOnClose
+      >
+        <div className="py-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Ứng tuyển vị trí: <span className="font-semibold text-gray-900">{job?.title}</span>
+          </p>
+          <Form
+            layout="vertical"
+            onFinish={handleApplySubmit}
+            initialValues={{ coverLetter: "" }}
+          >
+            <Form.Item
+              label={<span className="text-sm font-medium text-gray-700">Thư ứng tuyển</span>}
+              name="coverLetter"
+              rules={[{ required: true, message: "Vui lòng nhập thư ứng tuyển" }]}
+            >
+              <Input.TextArea
+                rows={6}
+                placeholder="Giới thiệu ngắn gọn về bản thân và lý do bạn phù hợp với vị trí này..."
+                maxLength={2000}
+                showCount
+              />
+            </Form.Item>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setApplyModalOpen(false)}
+                disabled={applyLoading}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Huỷ
+              </button>
+              <button
+                type="submit"
+                disabled={applyLoading}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {applyLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {applyLoading ? "Đang gửi…" : "Nộp đơn ứng tuyển"}
+              </button>
+            </div>
+          </Form>
+        </div>
+      </Modal>
     </div>
   );
 };

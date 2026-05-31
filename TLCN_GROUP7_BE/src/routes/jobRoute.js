@@ -24,7 +24,7 @@ router.use(AuthMiddleware.verifyToken);
 router.post("/", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.create);
 router.get("/company/owned", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getOwned);
 
-router.get("/student/applied", jobPostingController.getApplied);
+router.get("/student/applied", RoleMiddleware.checkRole(["STUDENT"]), jobPostingController.getApplied);
 
 router.get("/admin/all", RoleMiddleware.checkRole(["ADMIN"]), jobPostingController.getAllAdmin);
 
@@ -37,7 +37,7 @@ router.get("/:id/skill-gap", jobPostingController.getSkillGap);
 
 router.get("/:id/learning-path", jobPostingController.getLearningPath);
 
-router.post("/:id/apply", jobPostingController.apply);
+router.post("/:id/apply", RoleMiddleware.checkRole(["STUDENT"]), jobPostingController.apply);
 
 router.get("/:id/applications", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getApplications);
 

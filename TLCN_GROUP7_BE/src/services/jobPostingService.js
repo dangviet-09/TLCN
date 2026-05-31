@@ -293,8 +293,8 @@ class JobPostingService {
   // Student: Apply for job
   // ==============================
 
-  async applyForJob(studentId, jobPostingId, coverLetter) {
-    const job = await db.JobPosting.findByPk(jobPostingId);
+  async applyForJob(jobId, studentId, coverLetter) {
+    const job = await db.JobPosting.findByPk(jobId);
     if (!job) throw new Error('Job không tồn tại');
     if (job.status !== 'OPEN') throw new Error('Job này không còn nhận ứng tuyển');
 
@@ -304,18 +304,15 @@ class JobPostingService {
       if (now > deadline) throw new Error('Hạn nộp đã hết');
     }
 
-    const student = await db.Student.findOne({ where: { id: studentId } });
-    if (!student) throw new Error('Student không tồn tại');
-
     // Kiểm tra chưa ứng tuyển
     const existing = await db.JobApplication.findOne({
-      where: { studentId, jobPostingId }
+      where: { studentId, jobPostingId: jobId }
     });
-    if (existing) throw new Error('Bạn đã ứng tuyển job này rồi');
+    if (existing) throw new Error('Bạn đã ứng tuyển công việc này rồi');
 
     const application = await db.JobApplication.create({
       studentId,
-      jobPostingId,
+      jobPostingId: jobId,
       coverLetter: coverLetter || null,
       status: 'PENDING',
       appliedAt: new Date()
@@ -325,17 +322,16 @@ class JobPostingService {
   }
 
   async getAppliedJobs(studentId) {
-    const student = await db.Student.findOne({ where: { id: studentId } });
-    if (!student) throw new Error('Student không tồn tại');
-
     const applications = await db.JobApplication.findAll({
       where: { studentId },
+      attributes: ['id', 'studentId', 'jobPostingId', 'coverLetter', 'status', 'appliedAt'],
       include: [
         {
           model: db.JobPosting,
           as: 'jobPosting',
+          attributes: ['id', 'title', 'location', 'salaryMin', 'salaryMax', 'employmentType', 'experienceLevel', 'deadline', 'status'],
           include: [
-            { model: db.Company, as: 'company', attributes: ['id', 'companyName'] }
+            { model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo'] }
           ]
         }
       ],

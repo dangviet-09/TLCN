@@ -1,4 +1,5 @@
 const db = require('../models');
+const jwt = require('jsonwebtoken');
 const jobPostingService = require('../services/jobPostingService');
 const studentService = require('../services/studentService');
 const ApiResponse = require('../utils/apiResponse');
@@ -161,11 +162,60 @@ class JobPostingController {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
+      const { isRecommended } = req.query;
+
+      // ── Auth guard: recommended mode requires student token ──
+      if (isRecommended === 'true') {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return ApiResponse.error(
+            res,
+            'Vui lòng đăng nhập với tài khoản sinh viên để dùng tính năng này',
+            401
+          );
+        }
+
+        let decoded;
+        try {
+          const token = authHeader.slice(7);
+          decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch {
+          return ApiResponse.error(
+            res,
+            'Vui lòng đăng nhập với tài khoản sinh viên để dùng tính năng này',
+            401
+          );
+        }
+
+        const student = await db.Student.findOne({ where: { userId: decoded.id } });
+        if (!student) {
+          return ApiResponse.error(
+            res,
+            'Vui lòng đăng nhập với tài khoản sinh viên để dùng tính năng này',
+            401
+          );
+        }
+
+        const filters = {
+          search: req.query.search,
+          location: req.query.location,
+          experienceLevel: req.query.experienceLevel,
+          employmentType: req.query.employmentType,
+          sort: req.query.sort,
+        };
+        const result = await jobPostingService.getJobs(
+          page, limit, filters, true, student.id
+        );
+        return ApiResponse.success(res, 'Lấy danh sách job thành công', result);
+      }
+
+      // ── Normal mode (public) ──
       const filters = {
         search: req.query.search,
         location: req.query.location,
         experienceLevel: req.query.experienceLevel,
-        employmentType: req.query.employmentType
+        employmentType: req.query.employmentType,
+        sort: req.query.sort,
       };
       const result = await jobPostingService.getJobs(page, limit, filters);
       return ApiResponse.success(res, 'Lấy danh sách job thành công', result);

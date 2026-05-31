@@ -147,12 +147,12 @@ class JobPostingService {
   // Public / Student endpoints
   // ==============================
 
-  async getJobs(page = 1, limit = 10, filters = {}) {
+  async getJobs(page = 1, limit = 10, filters = {}, isRecommended = false, studentId = null) {
     const offset = (page - 1) * limit;
     const where = { status: 'OPEN' };
 
     if (filters.location) {
-      where.location = { [db.Sequelize.Op.like]: `%${filters.location}%` };
+      where.location = { [db.Sequelize.Op.substring]: filters.location };
     }
     if (filters.experienceLevel) {
       where.experienceLevel = filters.experienceLevel;
@@ -161,17 +161,53 @@ class JobPostingService {
       where.employmentType = filters.employmentType;
     }
     if (filters.search) {
-      where[db.Sequelize.Op.or] = [
-        { title: { [db.Sequelize.Op.like]: `%${filters.search}%` } },
-        { description: { [db.Sequelize.Op.like]: `%${filters.search}%` } }
-      ];
+      where.title = { [db.Sequelize.Op.substring]: filters.search };
     }
 
+    // ── SQL ordering ──
+    const order = [];
+    if (filters.sort === 'salary_desc') {
+      order.push(['salaryMax', 'DESC']);
+    } else {
+      order.push(['createdAt', 'DESC']);
+    }
+
+    // ── Tầng 2: Matching — fetch ALL jobs, skip SQL limit/offset ──
+    if (isRecommended && studentId) {
+      const allJobs = await db.JobPosting.findAll({
+        where,
+        order,
+        include: [
+          { model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo'] }
+        ]
+      });
+
+      const enriched = await Promise.all(
+        allJobs.map(async (job) => {
+          try {
+            const { matchPercentage } = await this.analyzeSkillGap(studentId, job.id);
+            return { ...job.toJSON(), matchPercentage };
+          } catch {
+            return { ...job.toJSON(), matchPercentage: 0 };
+          }
+        })
+      );
+
+      enriched.sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+      const total = enriched.length;
+      const totalPages = Math.ceil(total / limit);
+      const rows = enriched.slice(offset, offset + limit);
+
+      return { data: rows, total, totalPages, currentPage: page };
+    }
+
+    // ── Normal: SQL pagination ──
     const { rows, count } = await db.JobPosting.findAndCountAll({
       where,
       limit,
       offset,
-      order: [['createdAt', 'DESC']],
+      order,
       include: [
         { model: db.Company, as: 'company', attributes: ['id', 'companyName', 'logo'] }
       ]
@@ -284,6 +320,22 @@ class JobPostingService {
       ],
       order: [['appliedAt', 'DESC']]
     });
+
+    // ── Attach matchPercentage to each application ──
+    await Promise.all(
+      applications.map(async (app) => {
+        if (!app.student || !app.student.id) {
+          app.setDataValue('matchPercentage', 0);
+          return;
+        }
+        try {
+          const result = await this.analyzeSkillGap(app.student.id, jobId);
+          app.setDataValue('matchPercentage', result.matchPercentage || 0);
+        } catch {
+          app.setDataValue('matchPercentage', 0);
+        }
+      })
+    );
 
     return { job, applications };
   }

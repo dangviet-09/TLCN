@@ -1,110 +1,126 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  Row,
+  Col,
+  Table,
+  Tag,
+  Button,
+  Typography,
+  Progress,
+  Tooltip,
+  Popover,
+  Spin,
+  Empty,
+  message,
+} from "antd";
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+} from "@ant-design/icons";
 import { apiClient } from "../../services/apiClient";
-import { ArrowLeft, Eye, Users, FileText } from "lucide-react";
-import { Modal, Select, message } from "antd";
 
-// ─── TypeScript Interfaces ────────────────────────────────────────────────────
+const { Title, Text } = Typography;
 
-interface ApiResponse<T> {
-  status: number;
-  message: string;
-  data: T;
-}
-
-interface StudentInfo {
-  fullName: string;
-  email: string;
-}
+// ─── Type Definitions ──────────────────────────────────────────────────────────
 
 interface JobApplication {
   id: string;
   studentId: string;
-  student: StudentInfo;
+  student: {
+    id: string;
+    user?: {
+      fullName: string;
+      email: string;
+    };
+  };
   coverLetter: string | null;
   status: ApplicationStatus;
   appliedAt: string;
+  matchPercentage?: number;
 }
 
-type ApplicationStatus = "PENDING" | "REVIEWING" | "SHORTLISTED" | "REJECTED" | "ACCEPTED";
+type ApplicationStatus =
+  | "PENDING"
+  | "REVIEWING"
+  | "SHORTLISTED"
+  | "REJECTED"
+  | "ACCEPTED";
 
 interface JobInfo {
   id: string;
   title: string;
+  location?: string;
+  status?: string;
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: { value: ApplicationStatus; label: string; color: string }[] = [
-  { value: "PENDING", label: "Chờ duyệt", color: "bg-gray-100 text-gray-600" },
-  { value: "REVIEWING", label: "Đang xem", color: "bg-blue-100 text-blue-700" },
-  { value: "SHORTLISTED", label: "Trong danh sách rút gọn", color: "bg-purple-100 text-purple-700" },
-  { value: "ACCEPTED", label: "Đồng ý", color: "bg-green-100 text-green-700" },
-  { value: "REJECTED", label: "Từ chối", color: "bg-red-100 text-red-700" },
-];
-
-const getStatusStyle = (status: ApplicationStatus) => {
-  const found = STATUS_OPTIONS.find((s) => s.value === status);
-  return found ? found.color : "bg-gray-100 text-gray-600";
+const STATUS_CONFIG: Record<
+  ApplicationStatus,
+  { color: string; label: string }
+> = {
+  PENDING:    { color: "gold",      label: "Chờ duyệt" },
+  REVIEWING:  { color: "processing", label: "Đang xem" },
+  SHORTLISTED: { color: "purple",   label: "Trong danh sách rút gọn" },
+  ACCEPTED:   { color: "success",   label: "Đồng ý" },
+  REJECTED:   { color: "error",      label: "Từ chối" },
 };
 
-const getStatusLabel = (status: ApplicationStatus) => {
-  const found = STATUS_OPTIONS.find((s) => s.value === status);
-  return found ? found.label : status;
-};
+const COVER_LETTER_MAX_LENGTH = 80;
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+// ─── Component ────────────────────────────────────────────────────────────────
 
-// ─── Component ─────────────────────────────────────────────────────────────────
-
-const CompanyJobApplications: React.FC = () => {
-  const navigate = useNavigate();
-  const { id: jobId } = useParams<{ id: string }>();
-
+const CompanyJobApplicationsPage: React.FC = () => {
+  // ── State ────────────────────────────────────────────────────────────────
+  const [ownedJobs, setOwnedJobs] = useState<JobInfo[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [applications, setApplications] = useState<JobApplication[]>([]);
-  const [job, setJob] = useState<JobInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isJobsLoading, setIsJobsLoading] = useState<boolean>(false);
+  const [isAppsLoading, setIsAppsLoading] = useState<boolean>(false);
 
-  const [coverLetterModal, setCoverLetterModal] = useState(false);
-  const [selectedCoverLetter, setSelectedCoverLetter] = useState<string | null>(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
-
-  const fetchApplications = useCallback(async () => {
-    if (!jobId) return;
+  // ── fetchOwnedJobs — fires on mount ─────────────────────────────────────
+  const fetchOwnedJobs = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const [appsData, jobData] = await Promise.all([
-        apiClient.get<JobApplication[]>(`/jobs/${jobId}/applications`),
-        apiClient.get<JobInfo>(`/jobs/${jobId}`),
-      ]);
-      setApplications(appsData ?? []);
-      setJob(jobData ?? null);
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message || err?.message || "Không thể tải danh sách ứng viên."
-      );
+      setIsJobsLoading(true);
+      const response = await apiClient.get<{ data: JobInfo[] }>("/jobs/company/owned");
+      setOwnedJobs(response.data ?? []);
+    } catch {
+      setOwnedJobs([]);
     } finally {
-      setLoading(false);
+      setIsJobsLoading(false);
     }
-  }, [jobId]);
+  }, []);
+
+  useEffect(() => {
+    fetchOwnedJobs();
+  }, [fetchOwnedJobs]);
+
+  // ── fetchApplications — fires when selectedJobId changes ────────────────
+  const fetchApplications = useCallback(async () => {
+    if (!selectedJobId) return;
+    try {
+      setIsAppsLoading(true);
+      const response = await apiClient.get<{ applications: JobApplication[] }>(
+        `/jobs/${selectedJobId}/applications`
+      );
+      setApplications(response.applications ?? []);
+    } catch {
+      setApplications([]);
+    } finally {
+      setIsAppsLoading(false);
+    }
+  }, [selectedJobId]);
 
   useEffect(() => {
     fetchApplications();
   }, [fetchApplications]);
 
-  const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
+  // ── handleUpdateStatus (Fix 3: correct URL) ────────────────────────────
+  const handleUpdateStatus = async (
+    applicationId: string,
+    newStatus: ApplicationStatus
+  ) => {
     try {
-      setUpdatingStatusId(applicationId);
       await apiClient.patch(`/jobs/applications/${applicationId}/status`, {
         status: newStatus,
       });
@@ -116,185 +132,243 @@ const CompanyJobApplications: React.FC = () => {
       );
     } catch (err: any) {
       message.error(
-        err?.response?.data?.message || err?.message || "Cập nhật trạng thái thất bại."
+        err?.response?.data?.message || "Cập nhật trạng thái thất bại."
       );
-    } finally {
-      setUpdatingStatusId(null);
     }
   };
 
-  const openCoverLetter = (coverLetter: string | null) => {
-    setSelectedCoverLetter(coverLetter);
-    setCoverLetterModal(true);
-  };
+  // ── Table columns ───────────────────────────────────────────────────────
+  const columns = [
+    {
+      title: "Ứng viên",
+      key: "candidate",
+      render: (_: any, record: JobApplication) => (
+        <div>
+          <Text strong style={{ display: "block" }}>
+            {record.student?.user?.fullName ?? "—"}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {record.student?.user?.email ?? "—"}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      title: "Thư ứng tuyển",
+      key: "coverLetter",
+      render: (_: any, record: JobApplication) => {
+        if (!record.coverLetter) {
+          return <Text type="secondary" italic>Không có</Text>;
+        }
+        const truncated =
+          record.coverLetter.length > COVER_LETTER_MAX_LENGTH
+            ? record.coverLetter.slice(0, COVER_LETTER_MAX_LENGTH) + "…"
+            : record.coverLetter;
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+        return (
+          <Popover
+            content={
+              <div style={{ maxWidth: 480, whiteSpace: "pre-wrap" }}>
+                {record.coverLetter}
+              </div>
+            }
+            title="Thư ứng tuyển"
+            trigger="click"
+          >
+            <Button type="link" size="small" style={{ padding: 0 }}>
+              {truncated}
+            </Button>
+          </Popover>
+        );
+      },
+    },
+    {
+      title: "Đã nộp",
+      key: "appliedAt",
+      dataIndex: "appliedAt",
+      render: (date: string) =>
+        date
+          ? new Date(date).toLocaleDateString("vi-VN", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+            })
+          : "—",
+      sorter: (a: JobApplication, b: JobApplication) =>
+        new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime(),
+    },
+    {
+      title: "Phù hợp",
+      key: "matchPercentage",
+      render: (_: any, record: JobApplication) => {
+        const pct = record.matchPercentage ?? 0;
+        return (
+          <Tooltip title={`Độ phù hợp: ${pct}%`}>
+            <Progress
+              type="circle"
+              size="small"
+              percent={pct}
+              strokeColor={
+                pct >= 80 ? "#52c41a" : pct >= 50 ? "#faad14" : "#ff4d4f"
+              }
+            />
+          </Tooltip>
+        );
+      },
+      sorter: (a: JobApplication, b: JobApplication) =>
+        (a.matchPercentage ?? 0) - (b.matchPercentage ?? 0),
+      sortDirections: ["descend", "ascend"] as ("descend" | "ascend")[],
+    },
+    {
+      title: "Trạng thái",
+      key: "status",
+      dataIndex: "status",
+      render: (status: ApplicationStatus) => {
+        const cfg = STATUS_CONFIG[status] ?? { color: "default", label: status };
+        return <Tag color={cfg.color}>{cfg.label}</Tag>;
+      },
+      filters: [
+        { text: "Chờ duyệt", value: "PENDING" },
+        { text: "Đang xem", value: "REVIEWING" },
+        { text: "Từ chối", value: "REJECTED" },
+      ],
+      onFilter: (value: any, record: JobApplication) => record.status === value,
+    },
+    {
+      title: "Hành động",
+      key: "actions",
+      render: (_: any, record: JobApplication) => (
+        <div style={{ display: "flex", gap: 8 }}>
+          <Button
+            size="small"
+            icon={<CheckCircleOutlined />}
+            type="primary"
+            disabled={record.status === "ACCEPTED"}
+            onClick={() => handleUpdateStatus(record.id, "ACCEPTED")}
+          >
+            Duyệt
+          </Button>
+          <Button
+            size="small"
+            icon={<CloseCircleOutlined />}
+            danger
+            disabled={record.status === "REJECTED"}
+            onClick={() => handleUpdateStatus(record.id, "REJECTED")}
+          >
+            Từ chối
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
-        <button
-          onClick={() => navigate("/company/jobs")}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">
-            Danh sách ứng viên
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {job?.title
-              ? `Ứng viên ứng tuyển: ${job.title}`
-              : "Đang tải thông tin việc làm…"}
-          </p>
-        </div>
-        <div className="text-sm text-gray-500">
-          {applications.length} ứng viên
-        </div>
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <Title level={4} style={{ margin: 0 }}>
+          Quản lý ứng viên
+        </Title>
       </div>
 
-      {/* Content */}
-      <div className="px-6 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <p className="text-red-500 mb-3">{error}</p>
-              <button
-                onClick={fetchApplications}
-                className="text-blue-600 hover:underline text-sm"
+      <div className="p-6">
+        <Row gutter={16}>
+          {/* ── LEFT COLUMN: Job list (Fix 1: plain div + ownedJobs.map) ──── */}
+          <Col xs={24} lg={6}>
+            <div
+              className="bg-white rounded-md border border-gray-200"
+              style={{ maxHeight: "calc(100vh - 160px)", overflowY: "auto" }}
+            >
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderBottom: "1px solid #f0f0f0",
+                  fontWeight: 600,
+                  color: "#262626",
+                }}
               >
-                Thử lại
-              </button>
-            </div>
-          ) : applications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <Users className="w-8 h-8 text-gray-400" />
+                Công việc của tôi
               </div>
-              <p className="text-gray-500 mb-2">Chưa có ứng viên nào ứng tuyển.</p>
-              <p className="text-sm text-gray-400">
-                Danh sách ứng viên sẽ xuất hiện khi có sinh viên nộp đơn.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Họ tên
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Thư ứng tuyển
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Ngày nộp
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Trạng thái
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {applications.map((app) => (
-                  <tr
-                    key={app.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    {/* Full Name */}
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-gray-900">
-                        {app?.student?.fullName ?? "—"}
-                      </span>
-                    </td>
-
-                    {/* Email */}
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-600">
-                        {app?.student?.email ?? "—"}
-                      </span>
-                    </td>
-
-                    {/* Cover Letter */}
-                    <td className="px-5 py-4">
-                      {app.coverLetter ? (
-                        <button
-                          onClick={() => openCoverLetter(app.coverLetter)}
-                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+              <Spin spinning={isJobsLoading}>
+                {ownedJobs.length === 0 ? (
+                  <div style={{ padding: "24px 16px" }}>
+                    <Text type="secondary">Bạn chưa đăng việc làm nào.</Text>
+                  </div>
+                ) : (
+                  ownedJobs.map((job) => {
+                    const isSelected = job.id === selectedJobId;
+                    return (
+                      <div
+                        key={job.id}
+                        onClick={() => setSelectedJobId(job.id)}
+                        style={{
+                          padding: "12px 16px",
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "#e6f7ff" : "transparent",
+                          borderLeft: isSelected
+                            ? "3px solid #1890ff"
+                            : "3px solid transparent",
+                          transition: "all 0.2s ease",
+                          borderBottom: "1px solid #f5f5f5",
+                        }}
+                        className="hover:bg-gray-50"
+                      >
+                        <Text
+                          strong
+                          style={{
+                            display: "block",
+                            color: isSelected ? "#1890ff" : "#262626",
+                          }}
                         >
-                          <FileText className="w-4 h-4" />
-                          Xem thư
-                        </button>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic">
-                          Không có thư ứng tuyển
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Applied At */}
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-500">
-                        {app.appliedAt ? formatDate(app.appliedAt) : "—"}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(app.status)}`}
-                        >
-                          {getStatusLabel(app.status)}
-                        </span>
-                        <Select
-                          value={app.status}
-                          onChange={(value) => handleStatusChange(app.id, value)}
-                          disabled={updatingStatusId === app.id}
-                          size="small"
-                          style={{ width: 140 }}
-                          options={STATUS_OPTIONS.map((opt) => ({
-                            value: opt.value,
-                            label: opt.label,
-                          }))}
-                        />
+                          {job.title}
+                        </Text>
+                        {job.location && (
+                          <Text
+                            type="secondary"
+                            style={{ fontSize: 12 }}
+                          >
+                            {job.location}
+                          </Text>
+                        )}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+                    );
+                  })
+                )}
+              </Spin>
+            </div>
+          </Col>
 
-      {/* Cover Letter Modal */}
-      <Modal
-        title="Thư ứng tuyển"
-        open={coverLetterModal}
-        onCancel={() => {
-          setCoverLetterModal(false);
-          setSelectedCoverLetter(null);
-        }}
-        footer={null}
-        width={640}
-      >
-        <div className="py-2">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {selectedCoverLetter ?? ""}
-          </p>
-        </div>
-      </Modal>
+          {/* ── RIGHT COLUMN: Applications table ──────────────────────────── */}
+          <Col xs={24} lg={18}>
+            <div className="bg-white rounded-md border border-gray-200 p-4">
+              <Spin spinning={isAppsLoading}>
+                {selectedJobId === null ? (
+                  <Empty
+                    description="Vui lòng chọn công việc ở danh sách bên trái để xem ứng viên"
+                    style={{ padding: "80px 0" }}
+                  />
+                ) : applications.length === 0 ? (
+                  <Empty
+                    description="Chưa có ứng viên nào ứng tuyển"
+                    style={{ padding: "80px 0" }}
+                  />
+                ) : (
+                  <Table
+                    rowKey="id"
+                    dataSource={applications}
+                    columns={columns}
+                    pagination={{ pageSize: 10 }}
+                    size="middle"
+                  />
+                )}
+              </Spin>
+            </div>
+          </Col>
+        </Row>
+      </div>
     </div>
   );
 };
 
-export default CompanyJobApplications;
+export default CompanyJobApplicationsPage;

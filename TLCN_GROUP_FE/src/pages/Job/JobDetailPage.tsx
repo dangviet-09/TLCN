@@ -258,7 +258,7 @@ const JobDetailPage: React.FC = () => {
             )}
 
             {/* Apply Button — at bottom of left column */}
-            <Space direction="vertical" style={{ marginTop: 24 }} className="w-full">
+            <Space orientation="vertical" style={{ marginTop: 24 }} className="w-full">
               <Button
                 type="primary"
                 size="large"

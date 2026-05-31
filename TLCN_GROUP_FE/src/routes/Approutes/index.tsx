@@ -25,6 +25,7 @@ import AIChat from "../../components/pages/AIChat";
 import CourseListPage from "../../pages/Course/CourseListPage";
 import CourseStudyPage from "../../pages/Course/CourseStudyPage";
 import MyCoursesPage from "../../pages/Course/MyCoursesPage";
+import { ProtectedRoute } from "../../components/ProtectedRoute";
 // Phase 5: Company pages
 import CompanyCourseManage from "../../pages/Company/CompanyCourseManage";
 import CompanyCourseEdit from "../../pages/Company/CompanyCourseEdit";
@@ -91,6 +92,14 @@ const AppRoutes: React.FC = () => {
       <Route path="/company/jobs/create" element={<CompanyJobForm />} />
       <Route path="/company/jobs/:id/edit" element={<CompanyJobForm />} />
       <Route path="/company/jobs/:id/applications" element={<CompanyJobApplications />} />
+      <Route
+        path="/company/applications"
+        element={
+          <ProtectedRoute allowedRoles={["COMPANY", "ADMIN"]}>
+            <CompanyJobApplications />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/company/career-tests" element={<CompanyCareerTestManage />} />
 
       {/* Phase 5: Admin routes */}

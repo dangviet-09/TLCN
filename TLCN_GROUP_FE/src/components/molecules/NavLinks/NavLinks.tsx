@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Brain } from 'lucide-react';
 import { House } from 'lucide-react';
 import { BookA } from 'lucide-react';
+import { Briefcase } from 'lucide-react';
 
 const links = [
 	{
@@ -24,6 +25,13 @@ const links = [
 		label: "AI Chat",
 		icon: (
 			<Brain />
+		)
+	},
+	{
+		to: "/jobs/market",
+		label: "Jobs",
+		icon: (
+			<Briefcase />
 		)
 	},
 ];

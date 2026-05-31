@@ -381,71 +381,32 @@ class CourseService {
   // Hàm mới: Sinh viên nộp bài thực hành (TASK lesson)
   // ==============================
 
-  async submitLessonTask(studentId, courseId, lessonId, submissionData) {
+  async submitLessonTask(studentId, careerPathId, lessonId, submissionData) {
+    // BẮT BUỘC query kiểm tra lessonId có tồn tại trong bảng db.Lesson không
     const lesson = await db.Lesson.findByPk(lessonId);
     if (!lesson) throw new Error("Lesson không tồn tại");
-    if (lesson.careerPathId !== courseId) throw new Error("Lesson không thuộc course này");
-    if (lesson.type !== 'TASK') throw new Error("Lesson này không phải loại TASK");
 
-    const student = await db.Student.findOne({ where: { id: studentId } });
-    if (!student) throw new Error("Student không tồn tại");
+    const rubric = lesson.rubric;
 
-    // Kiểm tra sinh viên đã enrolled course chưa
-    const progress = await db.StudentProgress.findOne({
-      where: { studentId, careerPathId: courseId }
+    // Gọi mock AI grading
+    const aiService = require('./aiService');
+    const aiResult = await aiService.mockGradeLessonTask(submissionData, rubric);
+
+    // Lưu vào DB với BẮT BUỘC các trường: studentId, lessonId, careerPathId,
+    // submissionData (JSON), score, aiGrading, status: 'GRADED', submittedAt, gradedAt
+    const submission = await db.CourseSubmission.create({
+      studentId,
+      lessonId,
+      careerPathId,
+      submissionData,
+      score: aiResult.score,
+      aiGrading: aiResult,
+      status: 'GRADED',
+      submittedAt: new Date(),
+      gradedAt: new Date()
     });
-    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
 
-    // Kiểm tra chưa nộp bài (hoặc cho phép nộp lại — tuỳ quyết định)
-    const existingSubmission = await db.CourseSubmission.findOne({
-      where: { studentId, lessonId, careerPathId: courseId }
-    });
-
-    let submission;
-    if (existingSubmission) {
-      // Cập nhật submission cũ (nộp lại)
-      await existingSubmission.update({
-        submissionData,
-        status: 'SUBMITTED',
-        submittedAt: new Date(),
-        score: null,
-        aiGrading: null,
-        gradedAt: null
-      });
-      submission = existingSubmission;
-    } else {
-      submission = await db.CourseSubmission.create({
-        studentId,
-        lessonId,
-        careerPathId: courseId,
-        submissionData,
-        status: 'SUBMITTED',
-        submittedAt: new Date()
-      });
-    }
-
-    // Gọi AI grading (phương thức sẽ được thêm ở Bước 2.7)
-    try {
-      const aiService = require('./aiService');
-      const gradingResult = await aiService.gradeLessonTask(
-        submissionData,
-        lesson.rubric,
-        lesson.submissionFields
-      );
-
-      await submission.update({
-        score: gradingResult.score,
-        aiGrading: gradingResult,
-        status: 'GRADED',
-        gradedAt: new Date()
-      });
-
-      return submission;
-    } catch (error) {
-      console.error('[CourseService.submitLessonTask] AI grading error:', error.message);
-      // Lưu submission thành công, grading thất bại → vẫn trả về submission để student biết đã nộp
-      return submission;
-    }
+    return submission;
   }
 
   // ==============================

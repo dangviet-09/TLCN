@@ -791,7 +791,21 @@ Hãy viết báo cáo bằng tiếng Việt, chi tiết, cụ thể và mang tí
   }
 
   // ==============================
-  // Lesson Task Grading
+  // Mock AI Grading (không gọi API bên ngoài)
+  // ==============================
+
+  async mockGradeLessonTask(submissionData, rubric) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return {
+      score: 8.5,
+      feedback: "Bài làm tốt, cấu trúc rõ ràng nhưng cần tối ưu hiệu năng.",
+      strengths: ["Hiểu đúng yêu cầu", "Triển khai logic tốt"],
+      improvements: ["Cần refactor code cho ngắn gọn hơn"]
+    };
+  }
+
+  // ==============================
+  // Real AI Grading (gọi Groq API)
   // ==============================
 
   async gradeLessonTask(submissionData, rubric, submissionFields) {

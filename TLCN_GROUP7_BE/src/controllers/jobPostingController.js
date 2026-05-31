@@ -18,6 +18,21 @@ class JobPostingController {
     }
   }
 
+  async createJob(req, res) {
+    try {
+      const company = await db.Company.findOne({ where: { userId: req.user.id } });
+      if (!company) {
+        return res.status(403).json({ status: 403, message: 'Không tìm thấy hồ sơ Doanh nghiệp của tài khoản này.' });
+      }
+
+      const newJob = await jobPostingService.createJobPosting(company.id, req.body);
+      return res.status(201).json({ status: 201, message: 'Đăng việc làm thành công', data: newJob });
+    } catch (error) {
+      console.error('[JobPostingController.createJob]', error);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi đăng việc làm', data: null });
+    }
+  }
+
   async update(req, res) {
     try {
       const result = await jobPostingService.updateJob(req.user.id, req.params.id, req.body);
@@ -80,16 +95,19 @@ class JobPostingController {
   // Student endpoints
   // ==============================
 
-  async apply(req, res) {
+  async applyJob(req, res) {
     try {
       const student = await db.Student.findOne({ where: { userId: req.user.id } });
-      if (!student) return ApiResponse.error(res, 'Hồ sơ sinh viên không tồn tại', 404);
+      if (!student) {
+        return res.status(403).json({ status: 403, message: 'Chỉ sinh viên mới có quyền ứng tuyển.' });
+      }
 
+      const jobId = req.params.id;
       const { coverLetter } = req.body;
-      const result = await jobPostingService.applyForJob(req.params.id, student.id, coverLetter);
-      return ApiResponse.success(res, 'Ứng tuyển thành công', result, 201);
+      const result = await jobPostingService.applyForJob(jobId, student.id, coverLetter);
+      return res.status(201).json({ status: 201, message: 'Ứng tuyển thành công', data: result });
     } catch (error) {
-      return ApiResponse.error(res, error.message, 400);
+      return res.status(400).json({ status: 400, message: error.message || 'Ứng tuyển thất bại', data: null });
     }
   }
 
@@ -107,25 +125,31 @@ class JobPostingController {
 
   async getSkillGap(req, res) {
     try {
-      const student = await studentService.getStudentByUserId(req.user.id);
-      if (!student) return ApiResponse.error(res, 'Student không tồn tại', 404);
+      const student = await db.Student.findOne({ where: { userId: req.user.id } });
+      if (!student) {
+        return res.status(403).json({ status: 403, message: 'Truy cập bị từ chối. Chỉ sinh viên mới có hồ sơ kỹ năng.' });
+      }
 
       const result = await jobPostingService.analyzeSkillGap(student.id, req.params.id);
-      return ApiResponse.success(res, 'Phân tích skill gap thành công', result);
+      return res.status(200).json({ status: 200, data: result });
     } catch (error) {
-      return ApiResponse.error(res, error.message, 400);
+      console.error('[JobPostingController.getSkillGap]', error);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi phân tích skill gap', data: null });
     }
   }
 
   async getLearningPath(req, res) {
     try {
       const student = await db.Student.findOne({ where: { userId: req.user.id } });
-      if (!student) return ApiResponse.error(res, 'Student không tồn tại', 404);
+      if (!student) {
+        return res.status(403).json({ status: 403, message: 'Chỉ sinh viên mới có quyền truy cập lộ trình học.' });
+      }
 
-      const result = await jobPostingService.suggestLearningPath(student.id, req.params.id);
-      return ApiResponse.success(res, 'Gợi ý lộ trình học thành công', result);
+      const path = await jobPostingService.suggestLearningPath(student.id, req.params.id);
+      return res.status(200).json({ status: 200, data: path });
     } catch (error) {
-      return ApiResponse.error(res, error.message, 400);
+      console.error('[JobPostingController.getLearningPath]', error);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi gợi ý lộ trình học', data: null });
     }
   }
 

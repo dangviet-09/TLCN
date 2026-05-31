@@ -21,7 +21,7 @@ router.use(AuthMiddleware.verifyToken);
 // =============================================
 // STATIC ROUTES (must come before dynamic /:id)
 // =============================================
-router.post("/", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.create);
+router.post("/", AuthMiddleware.verifyToken, RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.createJob);
 router.get("/company/owned", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getOwned);
 
 router.get("/student/applied", RoleMiddleware.checkRole(["STUDENT"]), jobPostingController.getApplied);
@@ -33,11 +33,11 @@ router.get("/admin/all", RoleMiddleware.checkRole(["ADMIN"]), jobPostingControll
 // Otherwise "skill-gap", "learning-path", "apply" would be captured as :id → 404
 // =============================================
 
-router.get("/:id/skill-gap", jobPostingController.getSkillGap);
+router.get("/:id/skill-gap", AuthMiddleware.verifyToken, jobPostingController.getSkillGap);
 
-router.get("/:id/learning-path", jobPostingController.getLearningPath);
+router.get("/:id/learning-path", AuthMiddleware.verifyToken, jobPostingController.getLearningPath);
 
-router.post("/:id/apply", RoleMiddleware.checkRole(["STUDENT"]), jobPostingController.apply);
+router.post("/:id/apply", AuthMiddleware.verifyToken, jobPostingController.applyJob);
 
 router.get("/:id/applications", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), jobPostingController.getApplications);
 

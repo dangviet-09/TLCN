@@ -1,5 +1,6 @@
 const courseService = require("../services/courseService");
 const studentService = require("../services/studentService");
+const db = require("../models");
 const ApiResponse = require("../utils/apiResponse");
 
 class CourseController {
@@ -231,24 +232,23 @@ class CourseController {
 
   async submitLessonTask(req, res) {
     try {
-      const userId = req.user.id;
       const { courseId, lessonId } = req.params;
-      const { submissionData } = req.body;
+      const submissionData = req.body;
 
       if (!submissionData) {
-        return ApiResponse.error(res, 'Thiếu submissionData', 400);
+        return res.status(400).json({ status: 400, message: 'Thiếu submissionData', data: null });
       }
 
-      const student = await studentService.getStudentByUserId(userId);
+      const student = await db.Student.findOne({ where: { userId: req.user.id } });
       if (!student) {
-        return ApiResponse.error(res, 'Student không tồn tại', 404);
+        return res.status(403).json({ status: 403, message: 'Không tìm thấy hồ sơ Sinh viên của tài khoản này.' });
       }
 
       const result = await courseService.submitLessonTask(student.id, courseId, lessonId, submissionData);
-      return ApiResponse.success(res, 'Nộp bài thực hành thành công', result, 201);
+      return res.status(200).json({ status: 200, message: 'Nộp bài và chấm điểm thành công', data: result });
     } catch (error) {
       console.error('[CourseController.submitLessonTask]', error);
-      return ApiResponse.error(res, error.message || 'Lỗi nộp bài', 400);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi nộp bài', data: null });
     }
   }
 

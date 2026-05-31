@@ -43,7 +43,7 @@ router.post(
   "/",
   RoleMiddleware.checkRole(["COMPANY", "ADMIN"]),
   uploadMiddleware.uploadSingle("image"),
-  courseController.create
+  courseController.createCourse
 );
 
 router.put("/:id", RoleMiddleware.checkRole(["COMPANY", "ADMIN"]), courseController.update);

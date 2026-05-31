@@ -48,7 +48,9 @@ class CourseService {
       companyId: companyIdForPath,
       image: null,
       publicId: null,
-      status: data.status || 'DRAFT'
+      status: data.status || 'DRAFT',
+      publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
+      isFeatured: data.isFeatured || false
     });
 
     if (files?.images?.length) {
@@ -275,6 +277,13 @@ class CourseService {
     return await db.Lesson.create({
       title: data.title,
       content: data.content || null,
+      type: data.type || 'THEORY',
+      theoryContent: data.theoryContent || null,
+      taskDescription: data.taskDescription || null,
+      submissionFields: data.submissionFields || [],
+      rubric: data.rubric || null,
+      attachments: data.attachments || null,
+      referenceLinks: data.referenceLinks || null,
       order: data.order || 0,
       careerPathId: courseId
     });

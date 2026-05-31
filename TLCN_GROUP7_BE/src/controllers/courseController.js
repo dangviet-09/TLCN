@@ -5,22 +5,34 @@ const ApiResponse = require("../utils/apiResponse");
 class CourseController {
 
   // ==============================
-  // Course Handlers — Company/Admin
+  // Course Handlers — Company/Admin (format: { status, message, data })
   // ==============================
 
-  async create(req, res) {
+  async createCourse(req, res) {
     try {
       const userId = req.user.id;
       const data = req.body;
       const files = req.files;
       const result = await courseService.createCourse(userId, data, files);
-      return ApiResponse.success(res, 'Tạo course thành công', result, 201);
+      return res.status(201).json({ status: 201, message: 'Tạo khóa học thành công', data: result });
     } catch (error) {
-      console.error('[CourseController.create]', error);
-      return ApiResponse.error(res, error.message || 'Lỗi tạo course', 400);
+      console.error('[CourseController.createCourse]', error);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi tạo khóa học', data: null });
     }
   }
 
+  async createLesson(req, res) {
+    try {
+      const userId = req.user.id;
+      const courseId = req.params.courseId;
+      const data = req.body;
+      const result = await courseService.createLesson(userId, courseId, data);
+      return res.status(201).json({ status: 201, message: 'Tạo bài giảng thành công', data: result });
+    } catch (error) {
+      console.error('[CourseController.createLesson]', error);
+      return res.status(400).json({ status: 400, message: error.message || 'Lỗi tạo bài giảng', data: null });
+    }
+  }
   async update(req, res) {
     try {
       const userId = req.user.id;

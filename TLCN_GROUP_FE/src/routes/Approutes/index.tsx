@@ -30,6 +30,8 @@ import CompanyJobManage from "../../pages/Company/CompanyJobManage";
 import CompanyJobForm from "../../pages/Company/CompanyJobForm";
 import CompanyJobApplications from "../../pages/Company/CompanyJobApplications";
 import CompanyCareerTestManage from "../../pages/Company/CompanyCareerTestManage";
+// Phase 5: CareerTest pages
+import StudentCareerTestPage from "../../pages/CareerTest/StudentCareerTestPage";
 // Phase 5: Admin pages
 import AdminCoursePage from "../../pages/Admin/AdminCoursePage";
 import AdminJobPage from "../../pages/Admin/AdminJobPage";
@@ -50,6 +52,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/career-paths" element={<CareerPathsPage />} />
+      <Route path="/career-tests/:id/take" element={<StudentCareerTestPage />} />
       <Route path="/courses/:id" element={<CourseDetailPage />} />
       <Route path="/users/:userId" element={<UserWallPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

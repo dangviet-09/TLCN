@@ -1,0 +1,20 @@
+- ROLE: Frontend System Architect & Executioner.
+- TECH STACK: React, TypeScript, Ant Design.
+
+- STRICT BOUNDARIES (MỆNH LỆNH CỨNG): 
+  1. CẤM đọc/ghi/đề xuất sửa chữa bất kỳ file nào trong thư mục `TLCN_GROUP7_BE`. Backend đã hoàn thiện 100%.
+  2. CẤM tự ý cài đặt thêm thư viện npm (như lucide-react, tailwind-merge).
+  3. CẤM tự ý tạo file mới (ví dụ: *_v2.tsx) để code tránh né. Phải sửa trực tiếp trên file được yêu cầu.
+
+- UI STANDARDS (MVP):
+  1. Chỉ sử dụng Component gốc của Ant Design. TUYỆT ĐỐI không viết custom CSS/Tailwind (trừ layout grid cơ bản).
+  2. Bắt buộc quản lý Form mảng động bằng `<Form.List>`. TUYỆT ĐỐI KHÔNG dùng `<Select mode="tags">` cho mảng Object.
+
+- DATA SAFETY & REACT HOOKS:
+  1. Ép kiểu dữ liệu (Type Assertion) nghiêm ngặt trước khi gọi API submit.
+  2. Mọi biến mảng/object lấy từ API phải có fallback để chống crash (VD: `data?.map` hoặc `data || []`).
+  3. CHỐNG RENDER VÔ HẠN: Mọi `useEffect` gọi API phải được kiểm soát dependency array cực kỳ chặt chẽ. Tránh đưa object/array trực tiếp vào dependencies nếu chưa được memoize.
+
+- API & ERROR HANDLING:
+  1. Mọi tác vụ gọi API phải bọc trong `try/catch`.
+  2. Khi gọi API thành công hoặc thất bại, BẮT BUỘC dùng `message.success()` hoặc `message.error()` của `antd` để thông báo cho người dùng. Không dùng `console.log` để báo lỗi.

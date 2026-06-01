@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Lesson, Test, Course } from '../../../types/types';
+import { Lesson, Test, Course, SubmissionField } from '../../../types/types';
 import { getCareerTestById } from '../../../api/careerPathApi';
 import { createLesson, getLessonById, updateLesson } from '../../../api/lessonApi';
 import { createTest, updateTest } from '../../../api/testApi';
@@ -9,7 +9,7 @@ import { Button } from '../../atoms/Button/Button';
 import { Toast } from '../../molecules/ToastNotification';
 import AddLessonModal from '../../molecules/AddLessonModal';
 import AddTestToLessonModal from '../../molecules/AddTestToLessonModal';
-import EditLessonModal from '../../molecules/EditLessonModal';
+import EditLessonModal, { type EditLessonFormValues } from '../../molecules/EditLessonModal';
 import EditTestModal from '../../molecules/EditTestModal';
 import MainTemplate from '../../templates/MainTemplate/MainTemplate';
 
@@ -36,7 +36,20 @@ const CareerPathDetailsPage: React.FC = () => {
     const [lessonTests, setLessonTests] = useState<Test[]>([]);
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
-    const [lessonForm, setLessonForm] = useState({ title: '', order: 1, content: '' });
+    const [addLessonForm, setAddLessonForm] = useState({
+        title: '',
+        order: 1,
+        content: '',
+    });
+    const [editLessonForm, setEditLessonForm] = useState<EditLessonFormValues>({
+        title: '',
+        order: 1,
+        type: 'THEORY',
+        theoryContent: '',
+        taskDescription: '',
+        rubric: '',
+        submissionFields: [],
+    });
     const [testForm, setTestForm] = useState({ title: '', description: '', type: 'MINI' as 'MINI' | 'FINAL_PATH', maxScore: 100, content: '' });
     const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
 
@@ -101,10 +114,28 @@ const CareerPathDetailsPage: React.FC = () => {
 
     const handleEditLesson = (lesson: Lesson) => {
         setEditingLessonId(lesson.id);
-        setLessonForm({
+        // Legacy: map content -> theoryContent or taskDescription
+        const migratedType: 'THEORY' | 'TASK' = (lesson as any).type ?? 'THEORY';
+        const migratedContent = (lesson as any).content ?? '';
+        const theoryContent = migratedType === 'THEORY' ? migratedContent : '';
+        const taskDescription = migratedType === 'TASK' ? migratedContent : '';
+
+        // Legacy: map string[] submissionFields to SubmissionField[]
+        const migratedFields: SubmissionField[] = ((lesson as any).submissionFields ?? []).map((f: any) => {
+            if (typeof f === 'string') {
+                return { id: crypto.randomUUID(), type: 'EXPLANATION' as const, label: f, required: true };
+            }
+            return f as SubmissionField;
+        });
+
+        setEditLessonForm({
             title: lesson.title,
             order: lesson.order,
-            content: lesson.content
+            type: migratedType,
+            theoryContent,
+            taskDescription,
+            rubric: (lesson as any).rubric ?? '',
+            submissionFields: migratedFields,
         });
         setShowEditLessonModal(true);
         setShowLessonDetailModal(false);
@@ -135,23 +166,56 @@ const CareerPathDetailsPage: React.FC = () => {
         setShowAddTestModal(true);
     };
 
-    const handleUpdateLesson = async () => {
-        if (!editingLessonId || !lessonForm.title.trim()) {
+    const handleUpdateLesson = async (values: {
+        title?: string;
+        order?: number;
+        type?: 'THEORY' | 'TASK';
+        theoryContent?: string;
+        taskDescription?: string;
+        rubric?: string;
+        submissionFields?: SubmissionField[];
+    }) => {
+        const title = values.title ?? '';
+        if (!editingLessonId || !title.trim()) {
             setToast({ message: 'Please enter lesson title!', type: 'warning' });
             return;
         }
 
         try {
-            await updateLesson(editingLessonId, {
-                title: lessonForm.title,
-                order: lessonForm.order,
-                content: lessonForm.content
-            });
+            const payload: Record<string, unknown> = {
+                title: title.trim(),
+                order: values.order ?? 1,
+                type: values.type ?? 'THEORY',
+            };
+
+            if (values.type === 'THEORY') {
+                if (values.theoryContent) {
+                    payload.theoryContent = values.theoryContent.trim();
+                }
+            } else {
+                if (values.taskDescription) {
+                    payload.taskDescription = values.taskDescription.trim();
+                }
+                if (values.rubric) {
+                    payload.rubric = values.rubric.trim();
+                }
+                // Safely filter submissionFields — guard against undefined
+                const fields = (values.submissionFields || []);
+                const migrated = fields.map((f: any) => {
+                    if (typeof f === 'string') {
+                        return { id: crypto.randomUUID(), type: 'EXPLANATION' as const, label: f, required: true };
+                    }
+                    return f as SubmissionField;
+                });
+                payload.submissionFields = migrated.filter((f: SubmissionField) => f.label?.trim() !== '');
+            }
+
+            await updateLesson(editingLessonId, payload);
 
             setToast({ message: 'Lesson updated successfully!', type: 'success' });
             setShowEditLessonModal(false);
             setEditingLessonId(null);
-            setLessonForm({ title: '', order: 1, content: '' });
+            setEditLessonForm({ title: '', order: 1, type: 'THEORY', theoryContent: '', taskDescription: '', rubric: '', submissionFields: [] });
 
             if (id) {
                 await loadTestDetails(id);
@@ -163,17 +227,20 @@ const CareerPathDetailsPage: React.FC = () => {
     };
 
     const handleAddLesson = async () => {
-        if (!id) return;
+        if (!id || !addLessonForm.title.trim()) {
+            setToast({ message: 'Please enter lesson title!', type: 'warning' });
+            return;
+        }
         try {
             const response = await createLesson(id, {
-                title: lessonForm.title,
-                order: lessonForm.order,
-                content: lessonForm.content
+                title: addLessonForm.title.trim(),
+                order: addLessonForm.order,
+                content: addLessonForm.content,
             });
 
             setToast({ message: 'Lesson added successfully!', type: 'success' });
             setShowAddLessonModal(false);
-            setLessonForm({ title: '', order: lessonForm.order + 1, content: '' });
+            setAddLessonForm({ title: '', order: addLessonForm.order + 1, content: '' });
 
             // Reload course data to show new lesson
             if (id) {
@@ -183,12 +250,10 @@ const CareerPathDetailsPage: React.FC = () => {
             if (confirm('Would you like to add a test for this lesson now?')) {
                 setCurrentLessonId((response as any).data?.id || (response as any).id);
                 setIsAddingLessonTest(true);
-                // Reset test form to empty before opening
                 setTestForm({ title: '', description: '', type: 'MINI', maxScore: 100, content: '' });
                 setShowAddTestModal(true);
             }
         } catch (error) {
-            console.error('Failed to add lesson:', error);
             setToast({ message: 'Failed to add lesson.', type: 'error' });
         }
     };
@@ -656,10 +721,13 @@ const CareerPathDetailsPage: React.FC = () => {
                 {/* Add Lesson Modal */}
                 <AddLessonModal
                     isOpen={showAddLessonModal}
-                    onClose={() => setShowAddLessonModal(false)}
+                    onClose={() => {
+                        setShowAddLessonModal(false);
+                        setAddLessonForm({ title: '', order: 1, content: '' });
+                    }}
                     onSubmit={handleAddLesson}
-                    lessonForm={lessonForm}
-                    setLessonForm={setLessonForm}
+                    lessonForm={addLessonForm}
+                    setLessonForm={setAddLessonForm}
                 />
 
                 {/* Add Test Modal */}
@@ -737,10 +805,13 @@ const CareerPathDetailsPage: React.FC = () => {
             {/* Edit Lesson Modal */}
             <EditLessonModal
                 isOpen={showEditLessonModal}
-                onClose={() => setShowEditLessonModal(false)}
+                onClose={() => {
+                    setShowEditLessonModal(false);
+                    setEditLessonForm({ title: '', order: 1, type: 'THEORY', theoryContent: '', taskDescription: '', rubric: '', submissionFields: [] });
+                }}
                 onSubmit={handleUpdateLesson}
-                lessonForm={lessonForm}
-                setLessonForm={setLessonForm}
+                lessonForm={editLessonForm}
+                setLessonForm={setEditLessonForm}
             />
 
             {/* Edit Test Modal */}

@@ -265,11 +265,27 @@ export type CreateTestPayload = {
   maxScore?: number;
 };
 
+// Submission field types
+export type SubmissionFieldType = "EXPLANATION" | "CODE" | "SQL_QUERY";
+
+export type SubmissionField = {
+  id: string;
+  type: SubmissionFieldType;
+  label: string;
+  language?: string | null;
+  required: boolean;
+};
+
 // Lesson type matching backend response
 export type Lesson = {
   id: string;
   title: string;
-  content: string;
+  type?: "THEORY" | "TASK";         // optional — legacy lessons may not have this
+  content?: string;                  // legacy field — map to theoryContent / taskDescription
+  theoryContent?: string | null;
+  taskDescription?: string | null;
+  submissionFields?: SubmissionField[] | null;
+  rubric?: string | null;
   order: number;
   careerPathId: string;
   createdAt: string;

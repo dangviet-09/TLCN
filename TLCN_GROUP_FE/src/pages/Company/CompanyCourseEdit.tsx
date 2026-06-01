@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiClient } from "../../services/apiClient";
-import { ArrowLeft, Plus, BookOpen, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, BookOpen, Trash2, Pencil } from "lucide-react";
 import {
   Button,
   Modal,
@@ -26,13 +26,23 @@ interface ApiResponse<T> {
   data: T;
 }
 
+export type SubmissionFieldType = "EXPLANATION" | "CODE" | "SQL_QUERY";
+
+export interface SubmissionField {
+  id: string;
+  type: SubmissionFieldType;
+  label: string;
+  language?: string | null;
+  required: boolean;
+}
+
 export interface Lesson {
   id: number | string;
   title: string;
   type: "THEORY" | "TASK";
   theoryContent: string | null;
   taskDescription: string | null;
-  submissionFields: string[] | null;
+  submissionFields: SubmissionField[] | null;
   rubric: string | null;
   order: number;
   careerPathId: number | string;
@@ -55,7 +65,7 @@ interface LessonFormValues {
   type: "THEORY" | "TASK";
   theoryContent?: string;
   taskDescription?: string;
-  submissionFields?: string[];
+  submissionFields?: SubmissionField[];
   rubric?: string;
 }
 
@@ -84,6 +94,12 @@ const STATUS_OPTIONS = [
   { value: "ARCHIVED", label: "Lưu trữ" },
 ];
 
+const LANGUAGES = [
+  "JavaScript", "TypeScript", "Python", "Java", "C++", "C#",
+  "Go", "Rust", "Ruby", "PHP", "Swift", "Kotlin",
+  "HTML", "CSS", "SQL", "Shell", "Dart",
+];
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const CompanyCourseEdit: React.FC = () => {
@@ -96,6 +112,7 @@ const CompanyCourseEdit: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [lessonModalOpen, setLessonModalOpen] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [lessonType, setLessonType] = useState<"THEORY" | "TASK">("THEORY");
   const [submitLessonLoading, setSubmitLessonLoading] = useState(false);
   const [deleteLessonLoading, setDeleteLessonLoading] = useState<string | number | null>(null);
@@ -135,8 +152,23 @@ const CompanyCourseEdit: React.FC = () => {
 
   const handleOpenLessonModal = () => {
     form.resetFields();
+    setEditingLesson(null);
     setLessonType("THEORY");
     form.setFieldValue("type", "THEORY");
+    setLessonModalOpen(true);
+  };
+
+  const handleEditLesson = (lesson: Lesson) => {
+    setEditingLesson(lesson);
+    setLessonType(lesson.type);
+    form.setFieldsValue({
+      title: lesson.title,
+      type: lesson.type,
+      theoryContent: lesson.theoryContent ?? "",
+      taskDescription: lesson.taskDescription ?? "",
+      rubric: lesson.rubric ?? "",
+      submissionFields: lesson.submissionFields ?? [],
+    });
     setLessonModalOpen(true);
   };
 
@@ -145,7 +177,7 @@ const CompanyCourseEdit: React.FC = () => {
     form.setFieldValue("type", val);
   };
 
-  const handleCreateLesson = async (values: LessonFormValues) => {
+  const handleSubmitLesson = async (values: LessonFormValues) => {
     if (!courseId) return;
     setSubmitLessonLoading(true);
     try {
@@ -165,14 +197,28 @@ const CompanyCourseEdit: React.FC = () => {
         if (values.rubric) {
           payload.rubric = values.rubric.trim();
         }
-        payload.submissionFields = Array.isArray(values.submissionFields)
-          ? values.submissionFields.filter((f) => String(f).trim() !== "")
-          : [];
+        const raw = values.submissionFields ?? [];
+        const migrated = raw.map((f) => {
+          if (typeof f === "string") {
+            return {
+              id: crypto.randomUUID(),
+              type: "EXPLANATION" as const,
+              label: f,
+              required: true,
+            };
+          }
+          return f as SubmissionField;
+        });
+        payload.submissionFields = migrated.filter((f) => f.label?.trim() !== "");
       }
 
-      await apiClient.post(`/courses/${courseId}/lessons`, payload);
-
-      message.success("Tạo bài giảng thành công!");
+      if (editingLesson) {
+        await apiClient.put(`/courses/${courseId}/lessons/${editingLesson.id}`, payload);
+        message.success("Cập nhật bài giảng thành công!");
+      } else {
+        await apiClient.post(`/courses/${courseId}/lessons`, payload);
+        message.success("Tạo bài giảng thành công!");
+      }
 
       // Refresh course data
       const refreshed = await apiClient.get<Course>(`/career-paths/${courseId}`);
@@ -180,9 +226,10 @@ const CompanyCourseEdit: React.FC = () => {
       setCourse({ ...(refreshedPayload as Course), lessons: (refreshedPayload as Course).lessons ?? [] });
 
       setLessonModalOpen(false);
+      setEditingLesson(null);
       form.resetFields();
     } catch (err: any) {
-      message.error(err?.response?.data?.message || err?.message || "Tạo bài giảng thất bại.");
+      message.error(err?.response?.data?.message || err?.message || (editingLesson ? "Cập nhật bài giảng thất bại." : "Tạo bài giảng thất bại."));
     } finally {
       setSubmitLessonLoading(false);
     }
@@ -330,12 +377,28 @@ const CompanyCourseEdit: React.FC = () => {
                           {lesson.submissionFields && lesson.submissionFields.length > 0 && (
                             <p className="text-xs">
                               <span className="text-gray-400">Trường nộp: </span>
-                              {lesson.submissionFields.join(", ")}
+                              {lesson.submissionFields.map((f) => {
+                                const label = typeof f === "string" ? f : f.label;
+                                const type = typeof f === "string" ? null : f.type;
+                                const lang = typeof f === "string" ? null : f.language;
+                                const tag = type === "CODE"
+                                  ? `${lang ?? "code"}`
+                                  : type === "SQL_QUERY"
+                                  ? "SQL"
+                                  : null;
+                                return `${label}${tag ? ` (${tag})` : ""}`;
+                              }).join(", ")}
                             </p>
                           )}
                         </div>
                       )}
                     </div>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<Pencil className="w-4 h-4" />}
+                      onClick={() => handleEditLesson(lesson)}
+                    />
                     <Button
                       type="text"
                       danger
@@ -351,12 +414,13 @@ const CompanyCourseEdit: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Lesson Modal */}
+      {/* Lesson Modal (Create / Edit) */}
       <Modal
-        title="Thêm bài giảng mới"
+        title={editingLesson ? "Chỉnh sửa bài giảng" : "Thêm bài giảng mới"}
         open={lessonModalOpen}
         onCancel={() => {
           setLessonModalOpen(false);
+          setEditingLesson(null);
           form.resetFields();
         }}
         footer={null}
@@ -366,9 +430,9 @@ const CompanyCourseEdit: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          onFinish={handleCreateLesson}
+          onFinish={handleSubmitLesson}
           className="mt-4"
-          initialValues={{ type: "THEORY" }}
+          initialValues={{ type: "THEORY", submissionFields: [] }}
         >
           {/* Lesson title */}
           <Form.Item
@@ -424,15 +488,97 @@ const CompanyCourseEdit: React.FC = () => {
               <Form.Item
                 name="submissionFields"
                 label="Trường cần nộp"
-                extra="Nhập tên trường rồi nhấn Enter (VD: github_link, live_demo)"
+                extra="Thêm từng trường cùng loại (Giải thích / Code / SQL)"
               >
-                <Select
-                  mode="tags"
-                  placeholder="Nhấn Enter để thêm trường..."
-                  allowClear
-                  tokenSeparators={[","]}
-                  onChange={(val) => form.setFieldValue("submissionFields", val)}
-                />
+                <Form.List name="submissionFields">
+                  {(fields, { add, remove }) => (
+                    <>
+                      {fields.map(({ key, name, ...rest }) => {
+                        const fieldType = Form.useWatch({
+                          name: [name, "type"],
+                          form,
+                        });
+
+                        return (
+                          <Space key={key} align="start" className="mb-2">
+                            {/* type selector */}
+                            <Form.Item
+                              {...rest}
+                              name={[name, "type"]}
+                              initialValue="EXPLANATION"
+                            >
+                              <Select
+                                style={{ width: 140 }}
+                                onChange={(val) => {
+                                  if (val !== "CODE") {
+                                    form.setFieldValue(["submissionFields", name, "language"], null);
+                                  }
+                                }}
+                              >
+                                <Select.Option value="EXPLANATION">Giải thích</Select.Option>
+                                <Select.Option value="CODE">Code</Select.Option>
+                                <Select.Option value="SQL_QUERY">SQL</Select.Option>
+                              </Select>
+                            </Form.Item>
+
+                            {/* label */}
+                            <Form.Item
+                              {...rest}
+                              name={[name, "label"]}
+                              rules={[{ required: true, message: "Nhập tên trường" }]}
+                            >
+                              <Input placeholder="VD: github_link" style={{ width: 160 }} />
+                            </Form.Item>
+
+                            {/* language — only if type === CODE */}
+                            {fieldType === "CODE" && (
+                              <Form.Item {...rest} name={[name, "language"]}>
+                                <Select
+                                  placeholder="Ngôn ngữ"
+                                  style={{ width: 120 }}
+                                  allowClear
+                                >
+                                  {LANGUAGES.map((l) => (
+                                    <Select.Option key={l} value={l}>{l}</Select.Option>
+                                  ))}
+                                </Select>
+                              </Form.Item>
+                            )}
+
+                            {/* required toggle */}
+                            <Form.Item
+                              {...rest}
+                              name={[name, "required"]}
+                              valuePropName="checked"
+                              initialValue={true}
+                            >
+                              <Switch checkedChildren="Bắt buộc" unCheckedChildren="Tùy chọn" />
+                            </Form.Item>
+
+                            <Button
+                              type="text"
+                              danger
+                              icon={<Trash2 className="w-4 h-4" />}
+                              onClick={() => remove(name)}
+                            />
+                          </Space>
+                        );
+                      })}
+
+                      <Button
+                        type="dashed"
+                        onClick={() =>
+                          add({ id: crypto.randomUUID(), type: "EXPLANATION", label: "", required: true })
+                        }
+                        block
+                        icon={<Plus className="w-4 h-4" />}
+                        className="mt-2"
+                      >
+                        Thêm trường nộp
+                      </Button>
+                    </>
+                  )}
+                </Form.List>
               </Form.Item>
             </>
           )}
@@ -448,7 +594,9 @@ const CompanyCourseEdit: React.FC = () => {
               Hủy
             </Button>
             <Button type="primary" htmlType="submit" loading={submitLessonLoading}>
-              {submitLessonLoading ? "Đang tạo…" : "Tạo bài giảng"}
+              {submitLessonLoading
+                ? (editingLesson ? "Đang cập nhật…" : "Đang tạo…")
+                : (editingLesson ? "Cập nhật bài giảng" : "Tạo bài giảng")}
             </Button>
           </div>
         </Form>

@@ -4,8 +4,14 @@ module.exports = (sequelize, DataTypes) => {
     score: { type: DataTypes.FLOAT },
     testId: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
       references: { model: 'tests', key: 'id' },
+      onDelete: 'CASCADE'
+    },
+    careerTestId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'career_tests', key: 'id' },
       onDelete: 'CASCADE'
     },
     studentId: {
@@ -60,6 +66,11 @@ module.exports = (sequelize, DataTypes) => {
   StudentTestResult.belongsTo(models.Test, {
     foreignKey: 'testId',
     as: 'test'
+  });
+
+  StudentTestResult.belongsTo(models.CareerTest, {
+    foreignKey: 'careerTestId',
+    as: 'careerTest'
   });
 };
 

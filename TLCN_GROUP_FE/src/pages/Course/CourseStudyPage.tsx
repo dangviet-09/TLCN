@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Form, Input, Button, Card, Tag, Typography, Spin, Alert, notification } from 'antd';
 import { apiClient } from '../../services/apiClient';
-import { getLessonById } from '../../api/lessonApi';
 
 const { Title, Text } = Typography;
 
@@ -29,22 +28,21 @@ const CourseStudyPage: React.FC = () => {
 
   useEffect(() => {
     const fetchLesson = async () => {
-      if (!lessonId) return;
+      if (!lessonId) { setLoading(false); return; }
       try {
         setLoading(true);
-        const response = await getLessonById(lessonId);
-        const lessonData = (response as any)?.data || response;
-        setLesson(lessonData);
+        const res = await apiClient.get(`/courses/${courseId}/lessons/${lessonId}`);
+        setLesson(res);
       } catch (error) {
-        console.error('Failed to load lesson:', error);
-        notification.error({ message: 'Không thể tải bài học' });
+        console.error("Failed to load lesson:", error);
+        notification.error({ message: "Không thể tải bài học" });
       } finally {
         setLoading(false);
       }
     };
 
     fetchLesson();
-  }, [lessonId]);
+  }, [courseId, lessonId]);
 
   const handleSubmit = async (values: Record<string, string>) => {
     if (!courseId || !lessonId) return;
@@ -167,14 +165,14 @@ const CourseStudyPage: React.FC = () => {
             onFinish={handleSubmit}
             disabled={isSubmitting}
           >
-            {(lesson.submissionFields || []).map((field: string) => (
+            {(lesson.submissionFields || []).map((field: any) => (
               <Form.Item
-                key={field}
-                label={field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                name={field}
-                rules={[{ required: true, message: `Vui lòng nhập ${field}` }]}
+                key={field.id || field.label}
+                label={field.label}
+                name={field.label}
+                rules={[{ required: field.required, message: `Vui lòng nhập ${field.label}` }]}
               >
-                <Input placeholder={`Nhập ${field.replace(/_/g, ' ')}`} />
+                <Input placeholder={`Nhập ${field.label}`} />
               </Form.Item>
             ))}
 

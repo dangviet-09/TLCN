@@ -11,10 +11,7 @@ import { AdminRoute } from "../../components/molecules/AdminRoute";
 import { AdminDashboard, StudentManagement, CompanyManagement, BlogManagement, CareerPathManagement } from "../../components/pages/Admin";
 import { Unauthorized } from "../../components/pages/Unauthorized/Unauthorized";
 import CareerPathsPage from "../../components/pages/CareerPaths/CareerPaths";
-import CareerPathDetailsPage from "../../components/pages/CareerPathDetails/CareerPathDetails";
-import CoursesPage from "../../components/pages/CoursesPage";
-import CourseDetailPage from "../../components/pages/CourseDetailPage";
-import CourseLearnPage from "../../components/pages/CourseLearnPage/CourseLearnPage";
+import CourseDetailPage from "../../pages/Course/CourseDetailPage";
 import UserWallPage from "../../components/pages/UserWallPage";
 import SettingsPage from "../../components/pages/Setting/Settings";
 import ConnectionsPage from "../../components/pages/Connections";
@@ -53,10 +50,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/career-paths" element={<CareerPathsPage />} />
-      <Route path="/career-paths/:id" element={<CareerPathDetailsPage />} />
-      <Route path="/courses" element={<CoursesPage />} />
       <Route path="/courses/:id" element={<CourseDetailPage />} />
-      <Route path="/courses/:id/learn" element={<CourseLearnPage />} />
       <Route path="/users/:userId" element={<UserWallPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/oauth-success" element={<OAuthSuccessPage />} />

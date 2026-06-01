@@ -32,7 +32,7 @@ function route(app) {
     app.use("/auth",authRouter)
     app.use("/users",userRouter)
     app.use("/blogs",blogRouter)
-    app.use("/career-test", careerTestRouter)
+    app.use("/career-tests", careerTestRouter);
     app.use("/challenge-tests", challengeTestRouter)
     app.use("/comments", commentRouter)
     app.use("/likes", likeRouter);

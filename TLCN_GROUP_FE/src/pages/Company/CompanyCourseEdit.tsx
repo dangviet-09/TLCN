@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiClient } from "../../services/apiClient";
-import { ArrowLeft, Plus, BookOpen, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, BookOpen, Trash2 } from "lucide-react";
 import {
-  Button,
-  Modal,
+  Button as AntButton,
   Form,
   Input,
   Select,
@@ -14,23 +13,18 @@ import {
   message,
   Skeleton,
   Empty,
+  Radio,
 } from "antd";
-import type { SelectProps } from "antd";
+import { Button } from "../../components/atoms/Button/Button";
 import dayjs from "dayjs";
 
 // ─── TypeScript Interfaces ────────────────────────────────────────────────────
 
-interface ApiResponse<T> {
-  status: number;
-  message: string;
-  data: T;
-}
-
-export type SubmissionFieldType = "EXPLANATION" | "CODE" | "SQL_QUERY";
+export type TLessonFieldType = "EXPLANATION" | "CODE" | "SQL_QUERY";
 
 export interface SubmissionField {
   id: string;
-  type: SubmissionFieldType;
+  type: TLessonFieldType;
   label: string;
   language?: string | null;
   required: boolean;
@@ -60,39 +54,17 @@ interface Course {
   lessons: Lesson[];
 }
 
-interface LessonFormValues {
+export type EditLessonFormValues = {
   title: string;
+  order: number;
   type: "THEORY" | "TASK";
-  theoryContent?: string;
-  taskDescription?: string;
-  submissionFields?: SubmissionField[];
-  rubric?: string;
-}
+  theoryContent: string;
+  taskDescription: string;
+  rubric: string;
+  submissionFields: SubmissionField[];
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const CATEGORIES = [
-  { value: "FRONTEND", label: "Frontend" },
-  { value: "BACKEND", label: "Backend" },
-  { value: "FULLSTACK", label: "Fullstack" },
-  { value: "MOBILE", label: "Mobile" },
-  { value: "AI", label: "AI / Machine Learning" },
-  { value: "DEVOPS", label: "DevOps" },
-  { value: "DATABASE", label: "Database" },
-  { value: "OTHER", label: "Khác" },
-];
-
-const LEVELS = [
-  { value: "BEGINNER", label: "Người mới bắt đầu" },
-  { value: "INTERMEDIATE", label: "Trung cấp" },
-  { value: "ADVANCED", label: "Nâng cao" },
-];
-
-const STATUS_OPTIONS = [
-  { value: "DRAFT", label: "Bản nháp" },
-  { value: "PUBLISHED", label: "Đã xuất bản" },
-  { value: "ARCHIVED", label: "Lưu trữ" },
-];
 
 const LANGUAGES = [
   "JavaScript", "TypeScript", "Python", "Java", "C++", "C#",
@@ -100,24 +72,39 @@ const LANGUAGES = [
   "HTML", "CSS", "SQL", "Shell", "Dart",
 ];
 
-// ─── Component ─────────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const CompanyCourseEdit: React.FC = () => {
   const { id: courseId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [form] = Form.useForm<LessonFormValues>();
+  const [form] = Form.useForm<EditLessonFormValues>();
+
+  // ── All hooks at the top ──────────────────────────────────────────────────
 
   const [course, setCourse] = useState<Course | null>(null);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const [lessonModalOpen, setLessonModalOpen] = useState(false);
-  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
-  const [lessonType, setLessonType] = useState<"THEORY" | "TASK">("THEORY");
+  const [showEditLessonModal, setShowEditLessonModal] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState<string | number | null>(null);
+  const [lessonForm, setLessonForm] = useState<EditLessonFormValues>({
+    title: "",
+    order: 1,
+    type: "THEORY",
+    theoryContent: "",
+    taskDescription: "",
+    rubric: "",
+    submissionFields: [],
+  });
+
   const [submitLessonLoading, setSubmitLessonLoading] = useState(false);
   const [deleteLessonLoading, setDeleteLessonLoading] = useState<string | number | null>(null);
 
-  // ─── Fetch course ───────────────────────────────────────────────────────────
+  // ── Watch lesson type for dynamic form sections ───────────────────────────
+
+  const lessonTypeValue = Form.useWatch("type", form) ?? lessonForm.type;
+
+  // ── Fetch course (Phase 5: /courses API) ────────────────────────────────
 
   useEffect(() => {
     if (!courseId) return;
@@ -126,16 +113,17 @@ const CompanyCourseEdit: React.FC = () => {
       setFetching(true);
       setFetchError(null);
       try {
-        const res = await apiClient.get<Course>(`/career-paths/${courseId}`);
-        // unwrap ApiResponse wrapper
-        const payload = (res as unknown as ApiResponse<Course>).data ?? res;
-        const loaded: Course = {
-          ...(payload as Course),
-          lessons: (payload as Course).lessons ?? [],
-        };
-        setCourse(loaded);
+        // apiClient.get<T>() unwraps { data: T } → T, so res is the Course object directly
+        const res = await apiClient.get<Course>(`/courses/${courseId}`);
+        setCourse({
+          ...res,
+          lessons: res.lessons ?? [],
+        });
       } catch (err: any) {
-        setFetchError(err?.response?.data?.message || err?.message || "Không thể tải thông tin khóa học.");
+        setFetchError(
+          err?.response?.data?.message || err?.message || "Không thể tải thông tin khóa học."
+        );
+        message.error("Không thể tải thông tin khóa học.");
       } finally {
         setFetching(false);
       }
@@ -144,98 +132,120 @@ const CompanyCourseEdit: React.FC = () => {
     fetchCourse();
   }, [courseId]);
 
-  // ─── Watch lesson type for dynamic form ────────────────────────────────────
-
-  const lessonTypeValue = Form.useWatch("type", form) ?? lessonType;
-
-  // ─── Create lesson ─────────────────────────────────────────────────────────
+  // ── Lesson handlers ───────────────────────────────────────────────────────
 
   const handleOpenLessonModal = () => {
     form.resetFields();
-    setEditingLesson(null);
-    setLessonType("THEORY");
+    setEditingLessonId(null);
+    setLessonForm({
+      title: "",
+      order: 1,
+      type: "THEORY",
+      theoryContent: "",
+      taskDescription: "",
+      rubric: "",
+      submissionFields: [],
+    });
     form.setFieldValue("type", "THEORY");
-    setLessonModalOpen(true);
+    setShowEditLessonModal(true);
   };
 
   const handleEditLesson = (lesson: Lesson) => {
-    setEditingLesson(lesson);
-    setLessonType(lesson.type);
-    form.setFieldsValue({
+    setEditingLessonId(lesson.id);
+    setLessonForm({
       title: lesson.title,
+      order: lesson.order,
       type: lesson.type,
       theoryContent: lesson.theoryContent ?? "",
       taskDescription: lesson.taskDescription ?? "",
       rubric: lesson.rubric ?? "",
       submissionFields: lesson.submissionFields ?? [],
     });
-    setLessonModalOpen(true);
+    form.setFieldsValue({
+      title: lesson.title,
+      order: lesson.order,
+      type: lesson.type,
+      theoryContent: lesson.theoryContent ?? "",
+      taskDescription: lesson.taskDescription ?? "",
+      rubric: lesson.rubric ?? "",
+      submissionFields: lesson.submissionFields ?? [],
+    });
+    setShowEditLessonModal(true);
   };
 
-  const handleLessonTypeChange = (val: "THEORY" | "TASK") => {
-    setLessonType(val);
-    form.setFieldValue("type", val);
-  };
+  // TRỌNG TÂM: handleUpdateLesson nhận values từ Form, dùng filter an toàn
+  const handleUpdateLesson = async (values: EditLessonFormValues) => {
+    if (!editingLessonId || !courseId) {
+      message.warning("Không tìm thấy bài giảng để cập nhật.");
+      return;
+    }
 
-  const handleSubmitLesson = async (values: LessonFormValues) => {
-    if (!courseId) return;
     setSubmitLessonLoading(true);
     try {
       const payload: Record<string, unknown> = {
         title: values.title.trim(),
         type: values.type,
+        order: values.order ?? 1,
       };
 
       if (values.type === "THEORY") {
         if (values.theoryContent) {
           payload.theoryContent = values.theoryContent.trim();
         }
-      } else if (values.type === "TASK") {
+      } else {
         if (values.taskDescription) {
           payload.taskDescription = values.taskDescription.trim();
         }
         if (values.rubric) {
           payload.rubric = values.rubric.trim();
         }
-        const raw = values.submissionFields ?? [];
-        const migrated = raw.map((f) => {
+        // Safe filter: guard against undefined
+        const fields = (values.submissionFields || []) as SubmissionField[];
+        const migrated: SubmissionField[] = fields.map((f) => {
           if (typeof f === "string") {
-            return {
-              id: crypto.randomUUID(),
-              type: "EXPLANATION" as const,
-              label: f,
-              required: true,
-            };
+            return { id: crypto.randomUUID(), type: "EXPLANATION" as const, label: f, required: true };
           }
           return f as SubmissionField;
         });
-        payload.submissionFields = migrated.filter((f) => f.label?.trim() !== "");
+        payload.submissionFields = migrated.filter(
+          (f) => (f.label?.trim() ?? "") !== ""
+        );
       }
 
-      if (editingLesson) {
-        await apiClient.put(`/courses/${courseId}/lessons/${editingLesson.id}`, payload);
-        message.success("Cập nhật bài giảng thành công!");
-      } else {
-        await apiClient.post(`/courses/${courseId}/lessons`, payload);
-        message.success("Tạo bài giảng thành công!");
-      }
+      // PUT /courses/:courseId/lessons/:lessonId/content
+      await apiClient.put(
+        `/courses/${courseId}/lessons/${editingLessonId}/content`,
+        payload
+      );
+      message.success("Cập nhật bài giảng thành công!");
 
-      // Refresh course data
-      const refreshed = await apiClient.get<Course>(`/career-paths/${courseId}`);
-      const refreshedPayload = (refreshed as unknown as ApiResponse<Course>).data ?? refreshed;
-      setCourse({ ...(refreshedPayload as Course), lessons: (refreshedPayload as Course).lessons ?? [] });
+      // Refresh
+      const refreshed = await apiClient.get<Course>(`/courses/${courseId}`);
+      setCourse({
+        ...refreshed,
+        lessons: refreshed.lessons ?? [],
+      });
 
-      setLessonModalOpen(false);
-      setEditingLesson(null);
+      setShowEditLessonModal(false);
+      setEditingLessonId(null);
+      setLessonForm({
+        title: "",
+        order: 1,
+        type: "THEORY",
+        theoryContent: "",
+        taskDescription: "",
+        rubric: "",
+        submissionFields: [],
+      });
       form.resetFields();
     } catch (err: any) {
-      message.error(err?.response?.data?.message || err?.message || (editingLesson ? "Cập nhật bài giảng thất bại." : "Tạo bài giảng thất bại."));
+      message.error(
+        err?.response?.data?.message || err?.message || "Cập nhật bài giảng thất bại."
+      );
     } finally {
       setSubmitLessonLoading(false);
     }
   };
-
-  // ─── Delete lesson ──────────────────────────────────────────────────────────
 
   const handleDeleteLesson = async (lessonId: string | number) => {
     if (!courseId) return;
@@ -255,7 +265,7 @@ const CompanyCourseEdit: React.FC = () => {
     }
   };
 
-  // ─── Render: Loading / Error ────────────────────────────────────────────────
+  // ── Render: Loading / Error ────────────────────────────────────────────────
 
   if (fetching) {
     return (
@@ -269,12 +279,12 @@ const CompanyCourseEdit: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
         <p className="text-red-500">{fetchError || "Không tìm thấy khóa học."}</p>
-        <Button onClick={() => navigate("/company/courses")}>Quay lại</Button>
+        <AntButton onClick={() => navigate("/company/courses")}>Quay lại</AntButton>
       </div>
     );
   }
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -287,11 +297,19 @@ const CompanyCourseEdit: React.FC = () => {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">{course.title || "Chỉnh sửa khóa học"}</h1>
+          <h1 className="text-xl font-bold text-gray-900">
+            {course.title || "Chỉnh sửa khóa học"}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {course.category && <Tag color="blue" className="mr-1">{course.category}</Tag>}
+            {course.category && (
+              <Tag color="blue" className="mr-1">
+                {course.category}
+              </Tag>
+            )}
             {course.level && <Tag>{course.level}</Tag>}
-            <Tag color={course.status === "PUBLISHED" ? "success" : "default"}>{course.status}</Tag>
+            <Tag color={course.status === "PUBLISHED" ? "success" : "default"}>
+              {course.status}
+            </Tag>
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -303,7 +321,9 @@ const CompanyCourseEdit: React.FC = () => {
       <div className="px-6 py-6 max-w-4xl mx-auto space-y-6">
         {/* Course meta info */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Thông tin khóa học</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-4">
+            Thông tin khóa học
+          </h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Danh mục: </span>
@@ -315,7 +335,9 @@ const CompanyCourseEdit: React.FC = () => {
             </div>
             <div>
               <span className="text-gray-500">Trạng thái: </span>
-              <Tag color={course.status === "PUBLISHED" ? "success" : "default"}>{course.status}</Tag>
+              <Tag color={course.status === "PUBLISHED" ? "success" : "default"}>
+                {course.status}
+              </Tag>
             </div>
             <div>
               <span className="text-gray-500">Ngày xuất bản: </span>
@@ -337,13 +359,13 @@ const CompanyCourseEdit: React.FC = () => {
               <BookOpen className="w-5 h-5" />
               Danh sách bài giảng ({course.lessons?.length ?? 0})
             </h2>
-            <Button
+            <AntButton
               type="primary"
               icon={<Plus className="w-4 h-4" />}
               onClick={handleOpenLessonModal}
             >
               Thêm bài giảng
-            </Button>
+            </AntButton>
           </div>
 
           {!course.lessons || course.lessons.length === 0 ? (
@@ -373,19 +395,22 @@ const CompanyCourseEdit: React.FC = () => {
                       )}
                       {lesson.type === "TASK" && (
                         <div className="text-sm text-gray-500 space-y-1">
-                          {lesson.taskDescription && <p className="line-clamp-1">{lesson.taskDescription}</p>}
+                          {lesson.taskDescription && (
+                            <p className="line-clamp-1">{lesson.taskDescription}</p>
+                          )}
                           {lesson.submissionFields && lesson.submissionFields.length > 0 && (
                             <p className="text-xs">
                               <span className="text-gray-400">Trường nộp: </span>
                               {lesson.submissionFields.map((f) => {
-                                const label = typeof f === "string" ? f : f.label;
-                                const type = typeof f === "string" ? null : f.type;
-                                const lang = typeof f === "string" ? null : f.language;
-                                const tag = type === "CODE"
-                                  ? `${lang ?? "code"}`
-                                  : type === "SQL_QUERY"
-                                  ? "SQL"
-                                  : null;
+                                const label = f.label;
+                                const type = f.type;
+                                const lang = f.language;
+                                const tag =
+                                  type === "CODE"
+                                    ? `${lang ?? "code"}`
+                                    : type === "SQL_QUERY"
+                                    ? "SQL"
+                                    : null;
                                 return `${label}${tag ? ` (${tag})` : ""}`;
                               }).join(", ")}
                             </p>
@@ -393,13 +418,14 @@ const CompanyCourseEdit: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <Button
+                    <AntButton
                       type="text"
                       size="small"
-                      icon={<Pencil className="w-4 h-4" />}
                       onClick={() => handleEditLesson(lesson)}
-                    />
-                    <Button
+                    >
+                      Sửa
+                    </AntButton>
+                    <AntButton
                       type="text"
                       danger
                       size="small"
@@ -414,193 +440,270 @@ const CompanyCourseEdit: React.FC = () => {
         </div>
       </div>
 
-      {/* Lesson Modal (Create / Edit) */}
-      <Modal
-        title={editingLesson ? "Chỉnh sửa bài giảng" : "Thêm bài giảng mới"}
-        open={lessonModalOpen}
-        onCancel={() => {
-          setLessonModalOpen(false);
-          setEditingLesson(null);
-          form.resetFields();
-        }}
-        footer={null}
-        destroyOnClose
-        width={640}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmitLesson}
-          className="mt-4"
-          initialValues={{ type: "THEORY", submissionFields: [] }}
-        >
-          {/* Lesson title */}
-          <Form.Item
-            name="title"
-            label="Tiêu đề bài giảng"
-            rules={[{ required: true, message: "Vui lòng nhập tiêu đề bài giảng." }]}
-          >
-            <Input placeholder="VD: Bài 1 - Giới thiệu ReactJS" />
-          </Form.Item>
-
-          {/* Lesson type */}
-          <Form.Item
-            name="type"
-            label="Loại bài giảng"
-            rules={[{ required: true, message: "Vui lòng chọn loại bài giảng." }]}
-          >
-            <Select
-              placeholder="Chọn loại"
-              onChange={(val) => handleLessonTypeChange(val as "THEORY" | "TASK")}
-            >
-              <Select.Option value="THEORY">Lý thuyết (THEORY)</Select.Option>
-              <Select.Option value="TASK">Bài tập (TASK)</Select.Option>
-            </Select>
-          </Form.Item>
-
-          {/* Theory fields — shown when type === THEORY */}
-          {lessonTypeValue === "THEORY" && (
-            <Form.Item name="theoryContent" label="Nội dung lý thuyết">
-              <Input.TextArea
-                rows={5}
-                placeholder="Nhập nội dung lý thuyết cho bài học..."
-              />
-            </Form.Item>
-          )}
-
-          {/* Task fields — shown when type === TASK */}
-          {lessonTypeValue === "TASK" && (
-            <>
-              <Form.Item name="taskDescription" label="Mô tả bài tập">
-                <Input.TextArea
-                  rows={4}
-                  placeholder="Mô tả chi tiết bài tập mà sinh viên cần hoàn thành..."
-                />
-              </Form.Item>
-
-              <Form.Item name="rubric" label="Rubric (tiêu chí chấm điểm)">
-                <Input.TextArea
-                  rows={3}
-                  placeholder="VD: Hoàn thành đúng: 5đ, Code sạch: 5đ"
-                />
-              </Form.Item>
-
-              <Form.Item
-                name="submissionFields"
-                label="Trường cần nộp"
-                extra="Thêm từng trường cùng loại (Giải thích / Code / SQL)"
+      {/* ── EditLessonModal overlay (replaces inline Modal) ─────────────────── */}
+      {!showEditLessonModal ? null : (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-2xl transform transition-all max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-blue-600"
+                >
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                {editingLessonId ? "Chỉnh sửa bài giảng" : "Thêm bài giảng mới"}
+              </h3>
+              <Button
+                onClick={() => {
+                  setShowEditLessonModal(false);
+                  setEditingLessonId(null);
+                  setLessonForm({
+                    title: "",
+                    order: 1,
+                    type: "THEORY",
+                    theoryContent: "",
+                    taskDescription: "",
+                    rubric: "",
+                    submissionFields: [],
+                  });
+                  form.resetFields();
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <Form.List name="submissionFields">
-                  {(fields, { add, remove }) => (
-                    <>
-                      {fields.map(({ key, name, ...rest }) => {
-                        const fieldType = Form.useWatch({
-                          name: [name, "type"],
-                          form,
-                        });
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </Button>
+            </div>
 
-                        return (
-                          <Space key={key} align="start" className="mb-2">
-                            {/* type selector */}
-                            <Form.Item
-                              {...rest}
-                              name={[name, "type"]}
-                              initialValue="EXPLANATION"
-                            >
-                              <Select
-                                style={{ width: 140 }}
-                                onChange={(val) => {
-                                  if (val !== "CODE") {
-                                    form.setFieldValue(["submissionFields", name, "language"], null);
-                                  }
-                                }}
+            {/* Form */}
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleUpdateLesson}
+            >
+              {/* Title */}
+              <Form.Item
+                name="title"
+                label="Tiêu đề bài giảng"
+                rules={[{ required: true, message: "Nhập tiêu đề bài giảng." }]}
+              >
+                <Input placeholder="VD: Bài 1 - Giới thiệu ReactJS" />
+              </Form.Item>
+
+              {/* Order */}
+              <Form.Item name="order" label="Thứ tự">
+                <Input type="number" min={1} />
+              </Form.Item>
+
+              {/* Type — Radio.Group */}
+              <Form.Item name="type" label="Loại bài giảng" initialValue="THEORY">
+                <Radio.Group>
+                  <Radio value="THEORY">Lý thuyết</Radio>
+                  <Radio value="TASK">Bài tập</Radio>
+                </Radio.Group>
+              </Form.Item>
+
+              {/* Theory fields — only when type === THEORY */}
+              {lessonTypeValue === "THEORY" && (
+                <Form.Item name="theoryContent" label="Nội dung lý thuyết">
+                  <Input.TextArea
+                    rows={5}
+                    placeholder="Nhập nội dung lý thuyết cho bài học..."
+                  />
+                </Form.Item>
+              )}
+
+              {/* Task fields — only when type === TASK */}
+              {lessonTypeValue === "TASK" && (
+                <>
+                  <Form.Item name="taskDescription" label="Mô tả bài tập">
+                    <Input.TextArea
+                      rows={4}
+                      placeholder="Mô tả chi tiết bài tập mà sinh viên cần hoàn thành..."
+                    />
+                  </Form.Item>
+
+                  <Form.Item name="rubric" label="Rubric (tiêu chí chấm điểm)">
+                    <Input.TextArea
+                      rows={3}
+                      placeholder="VD: Hoàn thành đúng: 5đ, Code sạch: 5đ"
+                    />
+                  </Form.Item>
+
+                  {/* submissionFields — Form.List with shouldUpdate for language field */}
+                  <Form.Item label="Trường cần nộp">
+                    <Form.List name="submissionFields">
+                      {(fields, { add, remove }) => (
+                        <>
+                          {fields.map(({ key, name, ...rest }) => (
+                            <Space key={key} align="start" className="mb-2 flex-wrap">
+                              {/* type selector */}
+                              <Form.Item
+                                {...rest}
+                                name={[name, "type"]}
+                                initialValue="EXPLANATION"
                               >
-                                <Select.Option value="EXPLANATION">Giải thích</Select.Option>
-                                <Select.Option value="CODE">Code</Select.Option>
-                                <Select.Option value="SQL_QUERY">SQL</Select.Option>
-                              </Select>
-                            </Form.Item>
-
-                            {/* label */}
-                            <Form.Item
-                              {...rest}
-                              name={[name, "label"]}
-                              rules={[{ required: true, message: "Nhập tên trường" }]}
-                            >
-                              <Input placeholder="VD: github_link" style={{ width: 160 }} />
-                            </Form.Item>
-
-                            {/* language — only if type === CODE */}
-                            {fieldType === "CODE" && (
-                              <Form.Item {...rest} name={[name, "language"]}>
                                 <Select
-                                  placeholder="Ngôn ngữ"
-                                  style={{ width: 120 }}
-                                  allowClear
+                                  style={{ width: 140 }}
+                                  onChange={(val) => {
+                                    if (val !== "CODE") {
+                                      form.setFieldValue(
+                                        ["submissionFields", name, "language"],
+                                        null
+                                      );
+                                    }
+                                  }}
                                 >
-                                  {LANGUAGES.map((l) => (
-                                    <Select.Option key={l} value={l}>{l}</Select.Option>
-                                  ))}
+                                  <Select.Option value="EXPLANATION">Giải thích</Select.Option>
+                                  <Select.Option value="CODE">Code</Select.Option>
+                                  <Select.Option value="SQL_QUERY">SQL</Select.Option>
                                 </Select>
                               </Form.Item>
-                            )}
 
-                            {/* required toggle */}
-                            <Form.Item
-                              {...rest}
-                              name={[name, "required"]}
-                              valuePropName="checked"
-                              initialValue={true}
-                            >
-                              <Switch checkedChildren="Bắt buộc" unCheckedChildren="Tùy chọn" />
-                            </Form.Item>
+                              {/* label */}
+                              <Form.Item
+                                {...rest}
+                                name={[name, "label"]}
+                                rules={[{ required: true, message: "Nhập tên trường" }]}
+                              >
+                                <Input
+                                  placeholder="VD: github_link"
+                                  style={{ width: 160 }}
+                                />
+                              </Form.Item>
 
-                            <Button
-                              type="text"
-                              danger
-                              icon={<Trash2 className="w-4 h-4" />}
-                              onClick={() => remove(name)}
-                            />
-                          </Space>
-                        );
-                      })}
+                              {/* language — only if type === CODE, via shouldUpdate (not useWatch in map) */}
+                              <Form.Item
+                                noStyle
+                                shouldUpdate={(
+                                  prev: Record<string, unknown>,
+                                  curr: Record<string, unknown>
+                                ) => {
+                                  const prevList = (
+                                    prev?.submissionFields as SubmissionField[] | undefined
+                                  ) ?? [];
+                                  const currList = (
+                                    curr?.submissionFields as SubmissionField[] | undefined
+                                  ) ?? [];
+                                  return prevList[name]?.type !== currList[name]?.type;
+                                }}
+                              >
+                                {() => {
+                                  const currentType = form.getFieldValue([
+                                    "submissionFields",
+                                    name,
+                                    "type",
+                                  ]);
+                                  if (currentType !== "CODE") return null;
+                                  return (
+                                    <Form.Item name={[name, "language"]}>
+                                      <Select
+                                        placeholder="Ngôn ngữ"
+                                        style={{ width: 120 }}
+                                        allowClear
+                                      >
+                                        {LANGUAGES.map((l) => (
+                                          <Select.Option key={l} value={l}>
+                                            {l}
+                                          </Select.Option>
+                                        ))}
+                                      </Select>
+                                    </Form.Item>
+                                  );
+                                }}
+                              </Form.Item>
 
-                      <Button
-                        type="dashed"
-                        onClick={() =>
-                          add({ id: crypto.randomUUID(), type: "EXPLANATION", label: "", required: true })
-                        }
-                        block
-                        icon={<Plus className="w-4 h-4" />}
-                        className="mt-2"
-                      >
-                        Thêm trường nộp
-                      </Button>
-                    </>
-                  )}
-                </Form.List>
-              </Form.Item>
-            </>
-          )}
+                              {/* required toggle */}
+                              <Form.Item
+                                {...rest}
+                                name={[name, "required"]}
+                                valuePropName="checked"
+                                initialValue={true}
+                              >
+                                <Switch checkedChildren="Bắt buộc" unCheckedChildren="Tùy chọn" />
+                              </Form.Item>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 mt-6">
-            <Button
-              onClick={() => {
-                setLessonModalOpen(false);
-                form.resetFields();
-              }}
-            >
-              Hủy
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitLessonLoading}>
-              {submitLessonLoading
-                ? (editingLesson ? "Đang cập nhật…" : "Đang tạo…")
-                : (editingLesson ? "Cập nhật bài giảng" : "Tạo bài giảng")}
-            </Button>
+                              <AntButton
+                                type="text"
+                                danger
+                                onClick={() => remove(name)}
+                              >
+                                Xóa
+                              </AntButton>
+                            </Space>
+                          ))}
+
+                          <AntButton
+                            type="dashed"
+                            block
+                            onClick={() =>
+                              add({
+                                id: crypto.randomUUID(),
+                                type: "EXPLANATION",
+                                label: "",
+                                required: true,
+                              })
+                            }
+                          >
+                            + Thêm trường nộp
+                          </AntButton>
+                        </>
+                      )}
+                    </Form.List>
+                  </Form.Item>
+                </>
+              )}
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowEditLessonModal(false);
+                    setEditingLessonId(null);
+                    form.resetFields();
+                  }}
+                >
+                  Hủy
+                </Button>
+                <AntButton
+                  htmlType="submit"
+                  loading={submitLessonLoading}
+                >
+                  {submitLessonLoading
+                    ? "Đang xử lý…"
+                    : editingLessonId
+                    ? "Cập nhật"
+                    : "Tạo bài giảng"}
+                </AntButton>
+              </div>
+            </Form>
           </div>
-        </Form>
-      </Modal>
+        </div>
+      )}
     </div>
   );
 };

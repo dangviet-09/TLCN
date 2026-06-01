@@ -137,7 +137,7 @@ class CareerTestService {
     if (!careerTest) throw new Error('Career test không tồn tại');
 
     const results = await db.StudentTestResult.findAll({
-      where: { testId },
+      where: { careerTestId: testId },
       include: [
         {
           model: db.Student,
@@ -179,7 +179,7 @@ class CareerTestService {
 
     // Kiểm tra đã làm test chưa
     const existing = await db.StudentTestResult.findOne({
-      where: { studentId, testId }
+      where: { studentId, careerTestId: testId }
     });
     if (existing) {
       return {
@@ -192,7 +192,7 @@ class CareerTestService {
     // Tạo bản ghi StudentTestResult (chưa có answers — chờ submit)
     const testResult = await db.StudentTestResult.create({
       studentId,
-      testId,
+      careerTestId: testId,
       score: null,
       passed: null,
       answers: [],
@@ -217,7 +217,7 @@ class CareerTestService {
 
     // Kiểm tra đã enrolled chưa
     const existingResult = await db.StudentTestResult.findOne({
-      where: { studentId, testId }
+      where: { studentId, careerTestId: testId }
     });
     if (!existingResult) {
       throw new Error('Bạn chưa bắt đầu bài test này. Hãy gọi enroll trước.');

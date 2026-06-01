@@ -264,7 +264,44 @@ OUTPUT FORMAT (JSON):
   }
 
   /**
-   * Grade CareerTest submission (MULTIPLE_CHOICE + SHORT_ANSWER)
+   * Build prompt cho LLM chấm Career Test
+   */
+  buildCareerTestPrompt(questions, studentAnswers) {
+    let prompt = `Hãy chấm bài test định hướng nghề nghiệp sau:\n\n`;
+    prompt += `Tổng số câu hỏi: ${questions.length}\n\n`;
+
+    questions.forEach((q, index) => {
+      prompt += `---\n`;
+      prompt += `**CÂU ${index + 1}** (${q.points || 10} điểm) - Loại: ${q.type}\n`;
+      prompt += `Câu hỏi: ${q.question}\n`;
+
+      if (q.type === 'MULTIPLE_CHOICE') {
+        if (q.options && q.options.length > 0) {
+          prompt += `Các lựa chọn:\n`;
+          q.options.forEach((opt, i) => {
+            prompt += `  ${String.fromCharCode(65 + i)}. ${opt}\n`;
+          });
+        }
+        prompt += `Đáp án đúng: ${q.correctAnswer}\n`;
+      } else if (q.type === 'SHORT_ANSWER') {
+        if (q.expectedAnswer) {
+          prompt += `Đáp án mẫu: ${q.expectedAnswer}\n`;
+        }
+        if (q.expectedKeywords && q.expectedKeywords.length > 0) {
+          prompt += `Từ khóa cần có: ${q.expectedKeywords.join(', ')}\n`;
+        }
+      }
+
+      const studentAnswer = studentAnswers.find(a => a.questionIndex === index);
+      prompt += `\n**Câu trả lời của học sinh:** ${studentAnswer?.answer || '(Không có)'}\n`;
+    });
+
+    prompt += `\n---\n\nHãy chấm điểm và trả về kết quả theo format JSON yêu cầu.`;
+    return prompt;
+  }
+
+  /**
+   * Grade CareerTest submission — Dùng LLM (Groq) + Vector Search cho suggestions
    */
   async gradeCareerTest(testId, studentId, answers) {
     try {
@@ -276,99 +313,114 @@ OUTPUT FORMAT (JSON):
         throw new Error('Career test không có câu hỏi nào');
       }
 
-      let totalScore = 0;
-      let totalPoints = 0;
-      const details = [];
+      // === BƯỚC 3: GỌI LLM (GROQ) ===
+      const gradingPrompt = this.buildCareerTestPrompt(questions, answers);
 
-      for (const question of questions) {
-        const points = question.points || 10;
-        totalPoints += points;
+      const systemPrompt = `Bạn là giáo viên chấm bài trắc nghiệm nghề nghiệp chuyên nghiệp.
+Nhiệm vụ: chấm điểm bài test định hướng nghề nghiệp gồm 2 loại câu hỏi.
 
-        const studentAnswer = answers.find(a => a.questionIndex === questions.indexOf(question));
+LOẠI CÂU HỎI VÀ CÁCH CHẤM:
+1. MULTIPLE_CHOICE:
+   - So sánh đáp án học sinh với đáp án đúng (so sánh không phân biệt hoa thường, bỏ khoảng trắng thừa)
+   - Đúng: full điểm. Sai: 0 điểm.
 
-        if (!studentAnswer) {
-          details.push({
-            questionIndex: questions.indexOf(question),
-            type: question.type,
-            maxPoints: points,
-            earnedPoints: 0,
-            isCorrect: false,
-            explanation: 'Không có câu trả lời'
-          });
-          continue;
-        }
+2. SHORT_ANSWER:
+   - So sánh nội dung câu trả lời với expectedKeywords hoặc expectedAnswer
+   - Nếu có expectedKeywords: kiểm tra % từ khóa khớp (không phân biệt hoa thường), cho điểm theo tỉ lệ
+   - Nếu không có expectedKeywords: đánh giá nội dung theo mức độ liên quan, logic, đầy đủ
+   - FULL match: full điểm. PARTIAL: điểm theo tỉ lệ. IRRELEVANT: 0 điểm.
 
-        let earnedPoints = 0;
-        let isCorrect = false;
-        let explanation = '';
+ĐẦU VÀO:
+- questions: mảng câu hỏi [{id, type, question, correctAnswer?, expectedKeywords?, points}]
+- studentAnswers: mảng câu trả lời [{questionIndex, answer}]
 
-        if (question.type === 'MULTIPLE_CHOICE') {
-          const normalizedCorrect = String(question.correctAnswer).toUpperCase().trim();
-          const normalizedAnswer = String(studentAnswer.answer).toUpperCase().trim();
-          isCorrect = normalizedCorrect === normalizedAnswer;
-          earnedPoints = isCorrect ? points : 0;
-          explanation = isCorrect
-            ? `Đúng. Đáp án: ${question.correctAnswer}`
-            : `Sai. Đáp án đúng: ${question.correctAnswer}, của bạn: ${studentAnswer.answer}`;
-        } else if (question.type === 'SHORT_ANSWER') {
-          const expectedKeywords = question.expectedKeywords || [];
-          if (expectedKeywords.length === 0) {
-            isCorrect = true;
-            earnedPoints = points;
-            explanation = 'Câu trả lời được chấp nhận (không có từ khóa yêu cầu)';
-          } else {
-            const answerLower = String(studentAnswer.answer).toLowerCase();
-            const matchedKeywords = expectedKeywords.filter(keyword =>
-              answerLower.includes(String(keyword).toLowerCase())
-            );
-            const matchRatio = matchedKeywords.length / expectedKeywords.length;
-            earnedPoints = Math.round(matchRatio * points * 100) / 100;
-            isCorrect = matchRatio >= 0.7;
-            explanation = matchRatio >= 0.7
-              ? `Đạt yêu cầu. Đã chứa ${matchedKeywords.length}/${expectedKeywords.length} từ khóa: ${matchedKeywords.join(', ')}`
-              : `Chưa đạt. Cần từ khóa: ${expectedKeywords.join(', ')}. Tìm thấy: ${matchedKeywords.join(', ') || 'không có'}`;
-          }
-        }
+QUY TẮC TÍNH ĐIỂM:
+- Điểm tối đa mỗi câu = question.points (mặc định 10)
+- Điểm final = tổng điểm / tổng điểm tối đa * 100 (thang 100)
 
-        totalScore += earnedPoints;
+OUTPUT FORMAT — BẮT BUỘC JSON (không có text khác):
+{
+  "score": <number 0-100>,
+  "correctCount": <number>,
+  "totalQuestions": <number>,
+  "feedback": "<nhận xét chung ngắn 1-3 câu>",
+  "details": [
+    {
+      "questionIndex": <number>,
+      "type": "<MULTIPLE_CHOICE|SHORT_ANSWER>",
+      "maxPoints": <number>,
+      "earnedPoints": <number>,
+      "isCorrect": <boolean>,
+      "explanation": "<giải thích ngắn 1-2 câu>"
+    }
+  ]
+}
 
-        details.push({
-          questionIndex: questions.indexOf(question),
-          type: question.type,
-          maxPoints: points,
-          earnedPoints,
-          isCorrect,
-          explanation
-        });
+KHÔNG thêm field "suggestions" trong kết quả chấm điểm này.
+"failedQuestions" sẽ được xử lý riêng ở bước Vector Search.`;
+
+      const response = await groqClient.post('/chat/completions', {
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: gradingPrompt }
+        ],
+        temperature: 0.3,
+        max_tokens: 3000
+      });
+
+      const rawContent = response.data.choices[0].message.content;
+
+      // Parse JSON từ response của LLM
+      let gradingResult;
+      try {
+        const jsonMatch = rawContent.match(/```json\n?([\s\S]*?)\n?```/) ||
+                          rawContent.match(/```\n?([\s\S]*?)\n?```/) ||
+                          rawContent.match(/(\{[\s\S]*\})/);
+        const jsonStr = jsonMatch ? jsonMatch[1] : rawContent;
+        gradingResult = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.error('[TestGradingService.gradeCareerTest] Parse error:', parseError, 'Raw:', rawContent);
+        throw new Error('Lỗi parse kết quả chấm điểm từ LLM');
       }
 
-      const finalScore = totalPoints > 0
-        ? Math.round((totalScore / totalPoints) * 100 * 100) / 100
-        : 0;
+      // Validate required fields
+      gradingResult.score = typeof gradingResult.score === 'number' ? gradingResult.score : 0;
+      gradingResult.details = Array.isArray(gradingResult.details) ? gradingResult.details : [];
+      gradingResult.feedback = gradingResult.feedback || 'Không có nhận xét';
+      gradingResult.correctCount = typeof gradingResult.correctCount === 'number' ? gradingResult.correctCount : 0;
+      gradingResult.totalQuestions = typeof gradingResult.totalQuestions === 'number' ? gradingResult.totalQuestions : questions.length;
 
-      const correctCount = details.filter(d => d.isCorrect).length;
+      // === BƯỚC 4: VECTOR SEARCH CHO SUGGESTIONS ===
+      const failedQuestions = gradingResult.details.filter(d => !d.isCorrect);
+      let suggestions = [];
 
-      const feedback = `Kết quả: ${correctCount}/${questions.length} câu đúng. Điểm: ${finalScore}/100.`;
-
-      const failedQuestions = details.filter(d => !d.isCorrect);
-      let suggestions = '';
       if (failedQuestions.length > 0) {
-        suggestions = `Bạn nên ôn lại ${failedQuestions.length} câu chưa đạt để cải thiện kết quả.`;
-      } else {
-        suggestions = 'Chúc mừng! Bạn đã hoàn thành xuất sắc bài test này.';
+        try {
+          const aiService = require('./aiService');
+          // Ghép nội dung câu hỏi sai thành query cho vector search
+          const failedTopics = failedQuestions
+            .map(fq => {
+              const q = questions[fq.questionIndex];
+              return q?.question || '';
+            })
+            .filter(Boolean)
+            .join(' ');
+
+          if (failedTopics) {
+            const courseResults = await aiService.searchCourses(failedTopics);
+            suggestions = Array.isArray(courseResults) ? courseResults.slice(0, 5) : [];
+          }
+        } catch (vectorError) {
+          // Fallback: nếu vector search lỗi, vẫn tiếp tục với suggestions = []
+          console.warn('[TestGradingService.gradeCareerTest] Vector search error:', vectorError.message);
+        }
       }
 
-      // TODO: Gợi ý courses cải thiện dựa trên câu hỏi sai qua aiService.searchCourses()
-      // Sẽ được thêm ở Bước 2.7 khi hoàn thiện aiService.searchCourses()
+      // Gắn suggestions vào kết quả
+      gradingResult.suggestions = suggestions;
 
-      return {
-        score: finalScore,
-        correctCount,
-        totalQuestions: questions.length,
-        feedback,
-        suggestions,
-        details
-      };
+      return gradingResult;
     } catch (error) {
       console.error('[TestGradingService.gradeCareerTest] Error:', error);
       throw error;

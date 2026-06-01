@@ -133,7 +133,10 @@ export type Course = {
   description?: string | null;
   image?: string | null;
   category?: string | null;
+  level?: string | null;
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  isFeatured?: boolean;
+  publishedAt?: string | null;
   companyId: string;
   createdAt: string;
   updatedAt: string;

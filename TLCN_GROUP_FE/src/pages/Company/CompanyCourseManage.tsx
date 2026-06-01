@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../services/apiClient";
-import { courseApi } from "../../api/courseApi";
-import { Plus, BookOpen, Edit2, Eye, Star } from "lucide-react";
+import { Plus, Edit2, Eye, Star } from "lucide-react";
 import {
   Table,
   Button,
@@ -15,33 +14,12 @@ import {
   Space,
   Tag,
   message,
-  Popconfirm,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
+import type { Course, CourseListResponse } from "../../types/types";
 
 // ─── TypeScript Interfaces ────────────────────────────────────────────────────
-
-interface ApiResponse<T> {
-  status: number;
-  message: string;
-  data: T;
-}
-
-export interface Course {
-  id: number | string;
-  title: string;
-  description: string | null;
-  category: string | null;
-  level: string | null;
-  status: string;
-  isFeatured: boolean;
-  publishedAt: string | null;
-  image: string | null;
-  companyId: number | string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface CourseFormValues {
   title: string;
@@ -50,13 +28,6 @@ interface CourseFormValues {
   level?: string;
   isFeatured?: boolean;
   publishedAt?: dayjs.Dayjs;
-}
-
-interface CourseListResponse {
-  total: number;
-  page: number;
-  limit: number;
-  data: Course[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -96,23 +67,20 @@ const CompanyCourseManage: React.FC = () => {
   const [listError, setListError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0 });
 
-  // ─── Fetch course list ─────────────────────────────────────────────────────
+  // ─── Fetch course list (Phase 5: /courses/company/owned API) ──────────────────
 
   const fetchCourses = async (page = 1) => {
     setListLoading(true);
     setListError(null);
     try {
-      const res = await apiClient.get<CourseListResponse>("/career-paths/my-courses", {
-        params: { page, limit: 10 },
-      });
-      // unwrap nested { data: { total, page, limit, data: [] } }
-      const payload = (res as unknown as ApiResponse<CourseListResponse>).data ?? (res as unknown as CourseListResponse);
-      const list: Course[] = "data" in payload ? payload.data : (payload as unknown as { rows?: Course[] }).rows ?? [];
-      const total: number = "total" in payload ? payload.total : (payload as unknown as { count?: number }).count ?? 0;
-      setCourses(list);
-      setPagination({ page, limit: 10, total });
+      const res = await apiClient.get<CourseListResponse>(
+        `/courses/company/owned?page=${page}&limit=10`
+      );
+      setCourses(res.data ?? []);
+      setPagination((prev) => ({ ...prev, page, total: res.total ?? 0 }));
     } catch (err: any) {
       setListError(err?.response?.data?.message || err?.message || "Không thể tải danh sách khóa học.");
+      message.error("Không thể tải danh sách khóa học.");
     } finally {
       setListLoading(false);
     }
@@ -143,11 +111,8 @@ const CompanyCourseManage: React.FC = () => {
         payload.publishedAt = values.publishedAt.toISOString();
       }
 
-      const res = await apiClient.post<Course>("/courses", payload);
-      const created: Course = (res as unknown as ApiResponse<Course>).data ?? res;
-      const courseId = typeof created === "object" && created !== null && "id" in created
-        ? String((created as Record<string, unknown>).id)
-        : String(res);
+      const created: Course = await apiClient.post<Course>("/courses", payload);
+      const courseId = String(created.id);
 
       message.success("Tạo khóa học thành công!");
       setCreateModalOpen(false);

@@ -177,7 +177,11 @@ class CourseService {
 
   async getCourseById(courseId, userId = null) {
     const course = await db.CareerPath.findByPk(courseId, {
-      include: [{ model: db.Company, as: 'company', attributes: ['id', 'userId', 'companyName'] }]
+      include: [
+        { model: db.Company, as: 'company', attributes: ['id', 'userId', 'companyName'] },
+        { model: db.Lesson, as: 'lessons' }
+      ],
+      order: [[{ model: db.Lesson, as: 'lessons' }, 'order', 'ASC']]
     });
     if (!course) throw new Error("Course không tồn tại");
 
@@ -192,16 +196,22 @@ class CourseService {
       throw new Error("Course chưa được xuất bản");
     }
 
-    const lessons = await LessonService.getAllLessons(courseId);
-    for (let lesson of lessons) {
-      lesson.miniTests = await TestService.getTestsByLesson(lesson.id);
-    }
+    // Serialize to plain object before mutating
+    const plainCourse = course.toJSON();
+
     const finalTest = await TestService.getFinalTestByCareerPath(courseId);
+    if (finalTest) {
+      plainCourse.finalTest = finalTest;
+    }
 
-    course.lessons = lessons;
-    course.finalTest = finalTest;
+    // Enrich each lesson with miniTests on the plain array
+    if (plainCourse.lessons && plainCourse.lessons.length > 0) {
+      for (const lesson of plainCourse.lessons) {
+        lesson.miniTests = await TestService.getTestsByLesson(lesson.id);
+      }
+    }
 
-    return course;
+    return plainCourse;
   }
 
   async getCoursesByCompany(userId, page = 1, limit = 10) {

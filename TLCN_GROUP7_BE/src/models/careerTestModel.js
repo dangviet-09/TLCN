@@ -15,13 +15,25 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'Bài test giúp xác định chuyên ngành phù hợp với sinh viên dựa trên sở thích và năng lực.'
     },
     questions: {
-      type: DataTypes.JSON, // Lưu toàn bộ danh sách câu hỏi
+      type: DataTypes.JSON, 
       allowNull: false
+    },
+    // BỔ SUNG CỘT BỊ THIẾU Ở ĐÂY
+    companyId: {
+      type: DataTypes.UUID,
+      allowNull: true, // Tạm để true để không làm crash các bài test cũ đã tạo trước đó
     }
   }, {
     tableName: 'career_tests',
     timestamps: true
   });
+
+  // Khai báo quan hệ với bảng Company (nếu hệ thống có setup index.js gộp model)
+  CareerTest.associate = function(models) {
+    if (models.Company) {
+      CareerTest.belongsTo(models.Company, { foreignKey: 'companyId', as: 'company' });
+    }
+  };
 
   return CareerTest;
 };

@@ -6,8 +6,8 @@ import { ProtectedRoute } from '../../ProtectedRoute';
 import StudentSettingsForm from '../../molecules/StudentSettingsForm';
 import CompanySettingsForm from '../../molecules/CompanySettingsForm';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useLocation } from 'react-router-dom';
-import { getMyCareerTests, createCareerTest, deleteCareerTest } from '../../../api/careerPathApi';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getMyCareerTests, getAllCareerTests, createCareerTest, deleteCareerTest } from '../../../api/careerPathApi';
 import { CareerTest } from '../../../types/types';
 import { Toast } from '../../molecules/ToastNotification';
 
@@ -16,6 +16,7 @@ type ViewType = 'career-paths' | 'profile' | 'settings';
 const CareerPathsPage: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [loadingTests, setLoadingTests] = useState(false);
 
@@ -28,7 +29,7 @@ const CareerPathsPage: React.FC = () => {
     if (location.pathname === '/profile') return 'profile';
     if (location.pathname === '/settings') return 'settings';
     if (location.pathname === '/career-paths') {
-      return user?.role === 'COMPANY' ? 'career-paths' : 'profile';
+      return 'career-paths';
     }
     return user?.role === 'COMPANY' ? 'career-paths' : 'profile';
   };
@@ -51,16 +52,18 @@ const CareerPathsPage: React.FC = () => {
     } else if (location.pathname === '/settings') {
       setActiveView('settings');
     } else if (location.pathname === '/career-paths') {
-      setActiveView(user?.role === 'COMPANY' ? 'career-paths' : 'profile');
+      setActiveView('career-paths');
     }
   }, [location.pathname, location.search, user?.role]);
 
   useEffect(() => {
     const loadTests = async () => {
-      if (activeView === 'career-paths' && user?.role === 'COMPANY') {
+      if (activeView === 'career-paths') {
         try {
           setLoadingTests(true);
-          const data = await getMyCareerTests();
+          const data = user?.role === 'COMPANY'
+            ? await getMyCareerTests()
+            : await getAllCareerTests();
           setTests(data);
         } catch (error) {
           console.error('Failed to load career tests:', error);
@@ -105,21 +108,18 @@ const CareerPathsPage: React.FC = () => {
     }
   };
 
-  const handleDeleteTest = async () => {
+  const handleDeleteTest = async (testId: string) => {
+    // Thêm hộp thoại xác nhận gốc của trình duyệt để an toàn
+    if (!window.confirm("Are you sure you want to delete this career test?")) return;
+  
     try {
-      await deleteCareerTest(deleteConfirm.testId);
-      setTests(tests.filter(test => test.id !== deleteConfirm.testId));
+      await deleteCareerTest(testId);
+      setTests(tests.filter(test => test.id !== testId));
       setToast({ message: 'Test deleted successfully!', type: 'success' });
     } catch (error) {
       console.error('Failed to delete career test:', error);
       setToast({ message: 'Failed to delete career test. Please try again!', type: 'error' });
-    } finally {
-      setDeleteConfirm({ isOpen: false, testId: '' });
     }
-  };
-
-  const openDeleteConfirm = (testId: string) => {
-    setDeleteConfirm({ isOpen: true, testId });
   };
 
   const renderContent = () => {
@@ -143,17 +143,19 @@ const CareerPathsPage: React.FC = () => {
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">Career Paths</h1>
                 <p className="text-gray-600">Manage and create career assessment tests</p>
               </div>
-              <Button
-                variant="primary"
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                Add Career Path
-              </Button>
+              {user?.role === 'COMPANY' && (
+                <Button
+                  variant="primary"
+                  onClick={() => setIsModalOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  Add Career Path
+                </Button>
+              )}
             </div>
 
             {loadingTests ? (
@@ -161,20 +163,26 @@ const CareerPathsPage: React.FC = () => {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
               </div>
             ) : tests.length === 0 ? (
-              <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-gray-400 mb-4">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No career tests found</h3>
-                <p className="text-gray-500 mb-6">Start by creating your first career test</p>
-                <Button variant="primary" onClick={() => setIsModalOpen(true)}>
-                  Create your first career test
-                </Button>
-              </div>
+              user?.role === 'COMPANY' ? (
+                <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-gray-400 mb-4">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No career tests found</h3>
+                  <p className="text-gray-500 mb-6">Start by creating your first career test</p>
+                  <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+                    Create your first career test
+                  </Button>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                  <p className="text-gray-500">Hiện chưa có bài test định hướng nào trên hệ thống.</p>
+                </div>
+              )
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {tests.map((test) => (
@@ -225,6 +233,23 @@ const CareerPathsPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-3 mt-auto">
+                        {user?.role === 'STUDENT' && test.id && (
+                          <Button
+                            variant="unstyled"
+                            onClick={() => navigate(`/career-tests/${test.id}/take`)}
+                            className="flex-1 px-4 py-2.5 bg-green-600 text-white hover:bg-green-700 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                              <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            Làm bài kiểm tra
+                          </Button>
+                        )}
+
                         <Button
                           variant="unstyled"
                           onClick={() => {
@@ -240,17 +265,19 @@ const CareerPathsPage: React.FC = () => {
                           Xem chi tiết
                         </Button>
 
-                        <Button
-                          variant="unstyled"
-                          onClick={() => handleDeleteTest(test.id)}
-                          className="p-2.5 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
-                          title="Delete Test"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </Button>
+                        {user?.role === 'COMPANY' && (
+                          <Button
+                            variant="unstyled"
+                            onClick={() => handleDeleteTest(test.id)}
+                            className="p-2.5 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                            title="Delete Test"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6"></polyline>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -295,25 +322,23 @@ const CareerPathsPage: React.FC = () => {
                 <span>Settings</span>
               </Button>
 
-              {/* Career Paths - Only for COMPANY role */}
-              {user?.role === 'COMPANY' && (
-                <Button
-                  variant="unstyled"
-                  onClick={() => setActiveView('career-paths')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${activeView === 'career-paths'
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                >
-                  <span className={activeView === 'career-paths' ? 'text-blue-600' : 'text-gray-400'}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                    </svg>
-                  </span>
-                  <span>Career Paths</span>
-                </Button>
-              )}
+              {/* Career Paths - visible for all roles */}
+              <Button
+                variant="unstyled"
+                onClick={() => setActiveView('career-paths')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${activeView === 'career-paths'
+                  ? 'bg-blue-50 text-blue-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+              >
+                <span className={activeView === 'career-paths' ? 'text-blue-600' : 'text-gray-400'}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                  </svg>
+                </span>
+                <span>Career Paths</span>
+              </Button>
             </nav>
 
             {/* Logout button at bottom */}

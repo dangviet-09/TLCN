@@ -99,6 +99,7 @@ const CompanyCourseEdit: React.FC = () => {
 
   const [submitLessonLoading, setSubmitLessonLoading] = useState(false);
   const [deleteLessonLoading, setDeleteLessonLoading] = useState<string | number | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   // ── Watch lesson type for dynamic form sections ───────────────────────────
 
@@ -173,74 +174,114 @@ const CompanyCourseEdit: React.FC = () => {
     setShowEditLessonModal(true);
   };
 
-  // TRỌNG TÂM: handleUpdateLesson nhận values từ Form, dùng filter an toàn
-  const handleUpdateLesson = async (values: EditLessonFormValues) => {
-    if (!editingLessonId || !courseId) {
-      message.warning("Không tìm thấy bài giảng để cập nhật.");
-      return;
+  // ── Shared: build content payload from form values (no API call) ─────────────
+  const buildLessonPayload = (values: EditLessonFormValues): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      title: values.title.trim(),
+      type: values.type,
+      order: values.order ?? 1,
+    };
+
+    if (values.type === "THEORY") {
+      if (values.theoryContent) {
+        payload.theoryContent = values.theoryContent.trim();
+      }
+    } else {
+      if (values.taskDescription) {
+        payload.taskDescription = values.taskDescription.trim();
+      }
+      if (values.rubric) {
+        payload.rubric = values.rubric.trim();
+      }
+      const fields = (values.submissionFields || []) as SubmissionField[];
+      const migrated: SubmissionField[] = fields.map((f) => {
+        if (typeof f === "string") {
+          return { id: crypto.randomUUID(), type: "EXPLANATION" as const, label: f, required: true };
+        }
+        return f as SubmissionField;
+      });
+      payload.submissionFields = migrated.filter((f) => (f.label?.trim() ?? "") !== "");
     }
+
+    return payload;
+  };
+
+  // ── RESET lesson form state ──────────────────────────────────────────────────
+  const resetLessonFormState = () => {
+    setEditingLessonId(null);
+    setLessonForm({
+      title: "",
+      order: 1,
+      type: "THEORY",
+      theoryContent: "",
+      taskDescription: "",
+      rubric: "",
+      submissionFields: [],
+    });
+    form.resetFields();
+  };
+
+  // ── REFRESH course list ──────────────────────────────────────────────────────
+  const refreshCourse = async () => {
+    if (!courseId) return;
+    const refreshed = await apiClient.get<Course>(`/courses/${courseId}`);
+    setCourse({ ...refreshed, lessons: refreshed.lessons ?? [] });
+  };
+
+  // ── UNIFIED handler: handles both CREATE (no id) and UPDATE (has id) ─────────
+  const handleLessonSubmit = async (values: EditLessonFormValues) => {
+    if (!courseId) return;
 
     setSubmitLessonLoading(true);
     try {
-      const payload: Record<string, unknown> = {
-        title: values.title.trim(),
-        type: values.type,
-        order: values.order ?? 1,
-      };
+      // ── UPDATE path: editing an existing lesson ─────────────────────────────
+      if (editingLessonId) {
+        const payload = buildLessonPayload(values);
+        await apiClient.put(
+          `/courses/${courseId}/lessons/${editingLessonId}/content`,
+          payload
+        );
+        message.success("Cập nhật bài giảng thành công!");
+        await refreshCourse();
+        setShowEditLessonModal(false);
+        resetLessonFormState();
+        return;
+      }
 
-      if (values.type === "THEORY") {
-        if (values.theoryContent) {
-          payload.theoryContent = values.theoryContent.trim();
-        }
-      } else {
-        if (values.taskDescription) {
-          payload.taskDescription = values.taskDescription.trim();
-        }
-        if (values.rubric) {
-          payload.rubric = values.rubric.trim();
-        }
-        // Safe filter: guard against undefined
-        const fields = (values.submissionFields || []) as SubmissionField[];
-        const migrated: SubmissionField[] = fields.map((f) => {
-          if (typeof f === "string") {
-            return { id: crypto.randomUUID(), type: "EXPLANATION" as const, label: f, required: true };
-          }
-          return f as SubmissionField;
-        });
-        payload.submissionFields = migrated.filter(
-          (f) => (f.label?.trim() ?? "") !== ""
+      // ── CREATE path: no existing lesson id ───────────────────────────────────
+      // Step 1: create the lesson record to get a new lessonId
+      const createPayload = { title: values.title.trim(), order: values.order ?? 1 };
+      const created: { id: string | number } = await apiClient.post(
+        `/courses/${courseId}/lessons`,
+        createPayload
+      );
+      const newLessonId = created?.id;
+      if (!newLessonId) {
+        message.error("Tạo bài giảng thất bại: không nhận được ID.");
+        return;
+      }
+
+      // Step 2: if the form has content fields, push them in a second request
+      const hasContent =
+        (values.type === "THEORY" && values.theoryContent?.trim()) ||
+        (values.type === "TASK" &&
+          (values.taskDescription?.trim() || values.rubric?.trim() || (values.submissionFields?.length ?? 0) > 0));
+
+      if (hasContent) {
+        const contentPayload = buildLessonPayload(values);
+        await apiClient.put(
+          `/courses/${courseId}/lessons/${newLessonId}/content`,
+          contentPayload
         );
       }
 
-      // PUT /courses/:courseId/lessons/:lessonId/content
-      await apiClient.put(
-        `/courses/${courseId}/lessons/${editingLessonId}/content`,
-        payload
-      );
-      message.success("Cập nhật bài giảng thành công!");
-
-      // Refresh
-      const refreshed = await apiClient.get<Course>(`/courses/${courseId}`);
-      setCourse({
-        ...refreshed,
-        lessons: refreshed.lessons ?? [],
-      });
-
+      message.success("Tạo bài giảng thành công!");
+      await refreshCourse();
       setShowEditLessonModal(false);
-      setEditingLessonId(null);
-      setLessonForm({
-        title: "",
-        order: 1,
-        type: "THEORY",
-        theoryContent: "",
-        taskDescription: "",
-        rubric: "",
-        submissionFields: [],
-      });
-      form.resetFields();
+      resetLessonFormState();
     } catch (err: any) {
       message.error(
-        err?.response?.data?.message || err?.message || "Cập nhật bài giảng thất bại."
+        err?.response?.data?.message || err?.message || "Thao tác bài giảng thất bại."
       );
     } finally {
       setSubmitLessonLoading(false);
@@ -262,6 +303,52 @@ const CompanyCourseEdit: React.FC = () => {
       message.error(err?.response?.data?.message || err?.message || "Xóa bài giảng thất bại.");
     } finally {
       setDeleteLessonLoading(null);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!course || !courseId) return;
+
+    // ── Validation ──────────────────────────────────────────────────────────
+    const missingFields: string[] = [];
+
+    if (!course.description || course.description.trim() === "") {
+      missingFields.push("Mô tả khóa học");
+    }
+    if (!course.category || course.category.trim() === "") {
+      missingFields.push("Danh mục");
+    }
+    if (!course.level || course.level.trim() === "") {
+      missingFields.push("Cấp độ");
+    }
+    if (!course.lessons || course.lessons.length === 0) {
+      missingFields.push("Ít nhất 1 bài giảng");
+    }
+
+    if (missingFields.length > 0) {
+      message.error(`Không thể xuất bản. Vui lòng bổ sung: ${missingFields.join(", ")}.`);
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      await apiClient.patch(`/courses/${courseId}/publish`);
+      message.success("Xuất bản khóa học thành công!");
+      setCourse((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "PUBLISHED",
+              publishedAt: new Date().toISOString(),
+            }
+          : prev
+      );
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Xuất bản khóa học thất bại."
+      );
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -316,6 +403,15 @@ const CompanyCourseEdit: React.FC = () => {
           <span>Khóa học nổi bật</span>
           <Switch checked={course.isFeatured} disabled />
         </div>
+        {course.status === "DRAFT" && (
+          <AntButton
+            type="primary"
+            loading={publishing}
+            onClick={handlePublish}
+          >
+            Xuất bản
+          </AntButton>
+        )}
       </div>
 
       <div className="px-6 py-6 max-w-4xl mx-auto space-y-6">
@@ -502,7 +598,7 @@ const CompanyCourseEdit: React.FC = () => {
             <Form
               form={form}
               layout="vertical"
-              onFinish={handleUpdateLesson}
+              onFinish={handleLessonSubmit}
             >
               {/* Title */}
               <Form.Item

@@ -11,7 +11,7 @@ const uploadMiddleware = require("../middlewares/uploadMiddleware");
 
 router.get("/", courseController.getAll);
 
-router.get("/:id", courseController.getById);
+router.get("/:id", AuthMiddleware.optionalVerifyToken, courseController.getById);
 
 // =============================================
 // AUTHENTICATION REQUIRED

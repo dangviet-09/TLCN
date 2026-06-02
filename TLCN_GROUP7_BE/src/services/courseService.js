@@ -185,15 +185,22 @@ class CourseService {
     });
     if (!course) throw new Error("Course không tồn tại");
 
-    let user = null;
-    if (userId) {
-      user = await db.User.findOne({ where: { id: userId } });
-    }
-    const isOwner = userId && course.company?.userId === userId;
-    const isAdmin = user?.role === 'ADMIN';
-
-    if (!isOwner && !isAdmin && course.status !== 'PUBLISHED') {
-      throw new Error("Course chưa được xuất bản");
+    if (course.status !== 'PUBLISHED') {
+      if (!userId) {
+        throw new Error("Course chưa được xuất bản");
+      }
+      const user = await db.User.findOne({ where: { id: userId } });
+      if (user?.role === 'ADMIN') {
+        // Admin bypass — allowed
+      } else if (user?.role === 'COMPANY') {
+        // Company owner bypass: compare course.company.userId with userId
+        if (course.company?.userId !== userId) {
+          throw new Error("Course chưa được xuất bản");
+        }
+      } else {
+        // STUDENT or any other role: deny
+        throw new Error("Course chưa được xuất bản");
+      }
     }
 
     // Serialize to plain object before mutating

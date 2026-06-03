@@ -233,10 +233,12 @@ class CourseController {
   async submitLessonTask(req, res) {
     try {
       const { courseId, lessonId } = req.params;
-      const submissionData = req.body;
 
-      if (!submissionData) {
-        return res.status(400).json({ status: 400, message: 'Thiếu submissionData', data: null });
+      // BẢO MẬT: Chỉ trích xuất trường được phép — loại bỏ mọi field giả mạo (score, feedback, status...)
+      const { submissionData } = req.body;
+
+      if (!submissionData || (typeof submissionData === 'object' && Object.keys(submissionData).length === 0)) {
+        return res.status(400).json({ status: 400, message: 'Thiếu submissionData hoặc dữ liệu rỗng', data: null });
       }
 
       const student = await db.Student.findOne({ where: { userId: req.user.id } });

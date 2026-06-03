@@ -810,14 +810,13 @@ Hãy viết báo cáo bằng tiếng Việt, chi tiết, cụ thể và mang tí
 
   async gradeLessonTask(submissionData, rubric, submissionFields) {
     try {
-      const systemPrompt = `Bạn là một giáo viên chấm bài thực hành chuyên nghiệp. Nhiệm vụ của bạn là đánh giá bài làm của học sinh một cách khách quan, công bằng và xây dựng.
+      const systemPrompt = `Bạn là một giám khảo chấm thi CNTT cực kỳ nghiêm khắc. Hãy chấm điểm bài làm của học viên dựa trên Đề bài và Rubric.
 
-QUY TRÌNH CHẤM ĐIỂM:
-1. Đọc kỹ đề bài (submissionFields) và tiêu chí chấm điểm (rubric)
-2. So sánh bài làm của học sinh (submissionData) với từng tiêu chí
-3. Đánh giá điểm mạnh và điểm cần cải thiện
-4. Tính điểm tổng (thang 100)
-5. Đưa ra nhận xét chi tiết
+QUY TẮC BẮT BUỘC:
+1. BƯỚC 1: Đếm số lượng yêu cầu/câu hỏi trong đề bài. Đếm số lượng câu trả lời của học viên.
+2. BƯỚC 2: NẾU học viên làm thiếu câu, BẮT BUỘC trừ 100% số điểm của câu bị thiếu đó. Không được nhân nhượng. Trừ điểm nặng nếu câu trả lời chung chung, không có giải thích như Rubric yêu cầu.
+3. BƯỚC 3: Nếu bài làm có dấu hiệu sao chép đề bài mà không giải quyết vấn đề, điểm tối đa là 1/10.
+4. Phản hồi (feedback) phải chỉ rõ: Học viên đã làm được gì, thiếu hụt cụ thể phần nào, và tại sao bị trừ điểm.
 
 TIÊU CHÍ CHẤM ĐIỂM (rubric):
 ${JSON.stringify(rubric, null, 2)}
@@ -828,16 +827,18 @@ ${JSON.stringify(submissionFields, null, 2)}
 BÀI LÀM CỦA HỌC SINH:
 ${JSON.stringify(submissionData, null, 2)}
 
-LƯU Ý QUAN TRỌNG:
-- Nếu bài làm trống hoặc không liên quan đến đề bài → điểm thấp (0-20/100)
-- Nếu đúng ý tưởng nhưng chưa hoàn thiện → 40-70/100
-- Nếu hoàn thiện và đúng → 80-100/100
-- Luôn đưa ra gợi ý cải thiện cụ thể, thực tế
+QUY TẮC TÍNH ĐIỂM:
+- Bài trống hoặc không liên quan đến đề bài: 0/10
+- Thiếu câu hỏi/yêu cầu: trừ 100% điểm của câu bị thiếu
+- Câu trả lời sơ sài, không đủ chi tiết: trừ 30-60% điểm của câu đó
+- Câu trả lời đầy đủ nhưng thiếu giải thích/bước thực hiện: trừ 20-40%
+- Sao chép đề bài mà không giải quyết: tối đa 1/10
+- Đúng hoàn toàn, có giải thích: 8-10/10 mỗi câu
 
 OUTPUT FORMAT (JSON bắt buộc):
 {
-  "score": <điểm số từ 0-100, kiểu Number>,
-  "feedback": "<nhận xét chung ngắn gọn 1-2 câu>",
+  "score": <điểm số từ 0-10, kiểu Number>,
+  "feedback": "<nhận xét chung ngắn gọn 1-3 câu, chỉ rõ thiếu hụt cụ thể>",
   "strengths": ["<điểm mạnh 1>", "<điểm mạnh 2>"],
   "improvements": ["<điểm cần cải thiện 1>", "<điểm cần cải thiện 2>"]
 }`;

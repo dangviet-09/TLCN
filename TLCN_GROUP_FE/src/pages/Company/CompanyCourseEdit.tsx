@@ -637,14 +637,16 @@ const CompanyCourseEdit: React.FC = () => {
                 <>
                   <Form.Item name="taskDescription" label="Mô tả bài tập">
                     <Input.TextArea
-                      rows={4}
+                      className="min-h-[200px] w-full"
+                      rows={8}
                       placeholder="Mô tả chi tiết bài tập mà sinh viên cần hoàn thành..."
                     />
                   </Form.Item>
 
                   <Form.Item name="rubric" label="Rubric (tiêu chí chấm điểm)">
                     <Input.TextArea
-                      rows={3}
+                      className="min-h-[200px] w-full"
+                      rows={8}
                       placeholder="VD: Hoàn thành đúng: 5đ, Code sạch: 5đ"
                     />
                   </Form.Item>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Button, notification } from "antd";
 import MainTemplate from "../../components/templates/MainTemplate/MainTemplate";
 import { apiClient } from "../../services/apiClient";
 import type { Course } from "../../types/types";
@@ -10,6 +11,7 @@ const CourseDetailPage: React.FC = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEnrolling, setIsEnrolling] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -31,6 +33,43 @@ const CourseDetailPage: React.FC = () => {
     };
     fetchCourse();
   }, [id]);
+
+  const handleEnroll = async () => {
+    if (!id) return;
+
+    setIsEnrolling(true);
+    try {
+      await apiClient.post(`/courses/${id}/enroll`);
+
+      const firstLessonId = course?.lessons?.[0]?.id;
+      if (firstLessonId) {
+        navigate(`/courses/${id}/lessons/${firstLessonId}`);
+      } else {
+        notification.error({ message: "Khóa học chưa có bài giảng nào." });
+      }
+    } catch (err: any) {
+      const alreadyEnrolled =
+        err?.response?.status === 400 &&
+        (err?.response?.data?.message?.includes("ĐÃ ĐĂNG KÝ") ||
+          err?.response?.data?.message?.includes("đã đăng ký") ||
+          err?.response?.data?.status === 400);
+
+      if (alreadyEnrolled) {
+        const firstLessonId = course?.lessons?.[0]?.id;
+        if (firstLessonId) {
+          navigate(`/courses/${id}/lessons/${firstLessonId}`);
+        } else {
+          notification.error({ message: "Khóa học chưa có bài giảng nào." });
+        }
+      } else {
+        notification.error({
+          message: err?.response?.data?.message || "Đăng ký khóa học thất bại.",
+        });
+      }
+    } finally {
+      setIsEnrolling(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -134,6 +173,19 @@ const CourseDetailPage: React.FC = () => {
                     : "Bản nháp"}
                 </span>
               </div>
+              {course?.lessons && course.lessons.length > 0 && (
+                <div className="absolute bottom-4 right-4 z-10">
+                  <Button
+                    type="primary"
+                    size="large"
+                    className="shadow-lg font-semibold"
+                    onClick={handleEnroll}
+                    loading={isEnrolling}
+                  >
+                    Tham gia học ngay
+                  </Button>
+                </div>
+              )}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-8">
                 <h1 className="text-4xl font-bold text-white">{course.title}</h1>
                 {course.company?.companyName && (

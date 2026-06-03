@@ -405,9 +405,9 @@ class CourseService {
 
     const rubric = lesson.rubric;
 
-    // Gọi mock AI grading
+    // Gọi AI grading thực
     const aiService = require('./aiService');
-    const aiResult = await aiService.mockGradeLessonTask(submissionData, rubric);
+    const aiResult = await aiService.gradeLessonTask(submissionData, rubric, lesson.submissionFields);
 
     // Lưu vào DB với BẮT BUỘC các trường: studentId, lessonId, careerPathId,
     // submissionData (JSON), score, aiGrading, status: 'GRADED', submittedAt, gradedAt

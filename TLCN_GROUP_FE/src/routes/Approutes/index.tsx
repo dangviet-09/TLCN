@@ -78,7 +78,6 @@ const AppRoutes: React.FC = () => {
 
       {/* Phase 5: Course routes */}
       <Route path="/courses" element={<CourseListPage />} />
-      <Route path="/courses/:id" element={<CourseStudyPage />} />
       <Route path="/courses/:courseId/lessons/:lessonId" element={<CourseStudyPage />} />
       <Route path="/my-courses" element={<MyCoursesPage />} />
 

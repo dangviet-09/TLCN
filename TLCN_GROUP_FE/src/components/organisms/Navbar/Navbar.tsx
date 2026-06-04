@@ -458,15 +458,26 @@ const Navbar: React.FC = () => {
                     )}
 
                     {user?.role === 'ADMIN' && (
-                      <Link to="/admin/dashboard" onClick={() => setShowProfileDropdown(false)}>
-                        <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2 group">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 group-hover:text-red-600 transition-colors">
-                            <path d="M3 12l2-2m0 0l7-7 7 7"></path>
-                            <path d="M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3"></path>
-                          </svg>
-                          <span>Dashboard</span>
-                        </Button>
-                      </Link>
+                      <>
+                        <Link to="/admin/dashboard" onClick={() => setShowProfileDropdown(false)}>
+                          <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2 group">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 group-hover:text-red-600 transition-colors">
+                              <path d="M3 12l2-2m0 0l7-7 7 7"></path>
+                              <path d="M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3"></path>
+                            </svg>
+                            <span>Dashboard</span>
+                          </Button>
+                        </Link>
+                        <Link to="/admin/courses" onClick={() => setShowProfileDropdown(false)}>
+                          <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2 group">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 group-hover:text-red-600 transition-colors">
+                              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                            </svg>
+                            <span>Courses Management</span>
+                          </Button>
+                        </Link>
+                      </>
                     )}
 
                     <Link to="/settings" onClick={() => setShowProfileDropdown(false)}>

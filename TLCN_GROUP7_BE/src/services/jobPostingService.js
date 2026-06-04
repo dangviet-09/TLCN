@@ -726,6 +726,11 @@ class JobPostingService {
     await db.JobPosting.destroy({ where: { id: jobId } });
     return true;
   }
+
+  async incrementViewCount(jobId) {
+    if (!jobId) return;
+    await db.JobPosting.increment('viewCount', { by: 1, where: { id: jobId } });
+  }
 }
 
 module.exports = new JobPostingService();

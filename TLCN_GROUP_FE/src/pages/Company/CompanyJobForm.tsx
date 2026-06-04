@@ -106,6 +106,7 @@ const CompanyJobForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fetchingJob, setFetchingJob] = useState(isEditMode);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [hasApplications, setHasApplications] = useState(false);
 
   // Fetch job data for edit mode
   useEffect(() => {
@@ -136,6 +137,18 @@ const CompanyJobForm: React.FC = () => {
             : [],
         };
         setFormData(loaded);
+
+        // Check số lượng ứng viên
+        try {
+          const appsRes: any = await apiClient.get(`/jobs/${id}/applications`);
+          // Quét 3 tầng để tránh việc axios hoặc apiClient unwrap data khác nhau
+          const appsArray = appsRes?.applications || appsRes?.data?.applications || appsRes?.data?.data?.applications || [];
+          if (Array.isArray(appsArray) && appsArray.length > 0) {
+            setHasApplications(true);
+          }
+        } catch (appErr) {
+          console.error("Lỗi check CV:", appErr);
+        }
       } catch (err: any) {
         setFetchError(err?.response?.data?.message || err?.message || "Không thể tải thông tin việc làm.");
       } finally {
@@ -332,6 +345,12 @@ const CompanyJobForm: React.FC = () => {
 
       {/* Form */}
       <div className="px-6 py-6 max-w-5xl mx-auto">
+        {hasApplications && (
+          <div className="mb-5 p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-sm font-medium flex items-start gap-2">
+            <span>⚠️</span>
+            <span>Việc làm này đã có ứng viên. Hệ thống tự động khóa các trường: Loại hình, Cấp bậc, Mức lương và Kỹ năng để bảo toàn dữ liệu điểm đối chiếu (AI Match).</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Two-column layout */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -393,11 +412,13 @@ const CompanyJobForm: React.FC = () => {
                   name="employmentType"
                   value={formData.employmentType}
                   onChange={handleChange}
-                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors appearance-none bg-white ${
+                  disabled={hasApplications}
+                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors appearance-none ${
+                    hasApplications ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : (
                     errors.employmentType
                       ? "border-red-400 focus:border-red-500 bg-red-50"
-                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  }`}
+                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  )}`}
                 >
                   <option value="">-- Chọn loại hình --</option>
                   {EMPLOYMENT_TYPES.map((opt) => (
@@ -420,11 +441,13 @@ const CompanyJobForm: React.FC = () => {
                   name="experienceLevel"
                   value={formData.experienceLevel}
                   onChange={handleChange}
-                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors appearance-none bg-white ${
+                  disabled={hasApplications}
+                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors appearance-none ${
+                    hasApplications ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : (
                     errors.experienceLevel
                       ? "border-red-400 focus:border-red-500 bg-red-50"
-                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  }`}
+                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  )}`}
                 >
                   <option value="">-- Chọn cấp bậc --</option>
                   {EXPERIENCE_LEVELS.map((opt) => (
@@ -469,13 +492,15 @@ const CompanyJobForm: React.FC = () => {
                   name="salaryMin"
                   value={formData.salaryMin}
                   onChange={handleChange}
+                  disabled={hasApplications}
                   placeholder="VD: 15000000"
                   min="0"
                   className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors ${
+                    hasApplications ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : (
                     errors.salaryMin
                       ? "border-red-400 focus:border-red-500 bg-red-50"
-                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  }`}
+                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  )}`}
                 />
                 {errors.salaryMin && (
                   <p className="text-xs text-red-500 mt-1">{errors.salaryMin}</p>
@@ -492,13 +517,15 @@ const CompanyJobForm: React.FC = () => {
                   name="salaryMax"
                   value={formData.salaryMax}
                   onChange={handleChange}
+                  disabled={hasApplications}
                   placeholder="VD: 25000000"
                   min="0"
                   className={`w-full px-3.5 py-2.5 border rounded-lg text-sm outline-none transition-colors ${
+                    hasApplications ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : (
                     errors.salaryMax
                       ? "border-red-400 focus:border-red-500 bg-red-50"
-                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  }`}
+                      : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  )}`}
                 />
                 {errors.salaryMax && (
                   <p className="text-xs text-red-500 mt-1">{errors.salaryMax}</p>
@@ -566,7 +593,8 @@ const CompanyJobForm: React.FC = () => {
               <button
                 type="button"
                 onClick={handleAddSkill}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                disabled={hasApplications}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border rounded-lg transition-colors ${hasApplications ? "hidden" : "text-blue-600 border-blue-200 hover:bg-blue-50"}`}
               >
                 <Plus className="w-4 h-4" />
                 Thêm kỹ năng
@@ -595,8 +623,9 @@ const CompanyJobForm: React.FC = () => {
                         onChange={(e) =>
                           handleSkillChange(index, "skillName", e.target.value)
                         }
+                        disabled={hasApplications}
                         placeholder="VD: ReactJS"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -614,7 +643,8 @@ const CompanyJobForm: React.FC = () => {
                             e.target.value as "REQUIRED" | "NICE_TO_HAVE"
                           )
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white appearance-none"
+                        disabled={hasApplications}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white appearance-none disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                       >
                         {SKILL_LEVELS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -641,7 +671,8 @@ const CompanyJobForm: React.FC = () => {
                         }
                         min={1}
                         max={5}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        disabled={hasApplications}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -650,7 +681,8 @@ const CompanyJobForm: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveSkill(index)}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        disabled={hasApplications}
+                        className={`p-2 rounded-lg transition-colors ${hasApplications ? "hidden" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
                       >
                         <X className="w-4 h-4" />
                       </button>

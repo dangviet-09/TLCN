@@ -8,6 +8,7 @@ import { CareerTest } from "../../../types/types";
 import { Toast } from "../../molecules/ToastNotification";
 import { ConfirmModal } from "../../molecules/ConfirmModal/ConfirmModal";
 import { useNavigate } from "react-router-dom";
+import { apiClient } from "../../../services/apiClient";
 
 export const CareerPathManagement: React.FC = () => {
     const [careerPaths, setCareerPaths] = useState<CareerTest[]>([]);
@@ -54,6 +55,21 @@ export const CareerPathManagement: React.FC = () => {
 
     const handleDeleteCancel = () => {
         setShowDeleteConfirm(null);
+    };
+
+    const handleStatusChange = async (id: string, newStatus: string) => {
+        try {
+            // Gọi API update status
+            await apiClient.patch(`/career-paths/${id}/status`, { status: newStatus });
+            setToast({ message: 'Cập nhật trạng thái thành công!', type: 'success' });
+            fetchCareerPaths(); // Load lại dữ liệu
+        } catch (error: any) {
+            console.error("Error updating status:", error);
+            setToast({
+                message: error?.response?.data?.message || 'Lỗi cập nhật trạng thái (Có thể do phân quyền Backend)',
+                type: 'error'
+            });
+        }
     };
 
     const filteredPaths = careerPaths.filter((path) => {
@@ -186,6 +202,9 @@ export const CareerPathManagement: React.FC = () => {
                                         Created Date
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Status
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Actions
                                     </th>
                                 </tr>
@@ -193,7 +212,7 @@ export const CareerPathManagement: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center">
+                                        <td colSpan={6} className="px-6 py-12 text-center">
                                             <div className="flex items-center justify-center">
                                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                                 <span className="ml-3 text-gray-600">Loading...</span>
@@ -202,7 +221,7 @@ export const CareerPathManagement: React.FC = () => {
                                     </tr>
                                 ) : filteredPaths.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                                             No career paths found
                                         </td>
                                     </tr>
@@ -234,6 +253,17 @@ export const CareerPathManagement: React.FC = () => {
                                                 <div className="text-sm text-gray-900">
                                                     {new Date(path.createdAt).toLocaleDateString()}
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <select
+                                                    value={(path as any).status || 'DRAFT'}
+                                                    onChange={(e) => handleStatusChange(path.id, e.target.value)}
+                                                    className="block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md bg-gray-50 cursor-pointer"
+                                                >
+                                                    <option value="PUBLISHED">PUBLISHED</option>
+                                                    <option value="DRAFT">DRAFT</option>
+                                                    <option value="ARCHIVED">ARCHIVED</option>
+                                                </select>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <div className="flex items-center space-x-3">

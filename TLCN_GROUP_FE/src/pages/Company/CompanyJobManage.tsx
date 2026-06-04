@@ -101,6 +101,41 @@ const CompanyJobManage: React.FC = () => {
   const [jobToDelete, setJobToDelete] = useState<JobListItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
+  const [totalApplications, setTotalApplications] = useState<number>(0);
+
+  const loadApplicantCounts = async (jobList: any[]) => {
+  const counts: Record<string, number> = {};
+  let totalAll = 0;
+
+  await Promise.all(
+    jobList.map(async (job) => {
+      try {
+        const res = (await apiClient.get(`/jobs/${job.id}/applications`)) as any;
+
+        // Kỹ thuật bóc tách đa tầng (Multi-layer unwrapping)
+        const body = res?.data || res;
+        const dataLayer = body?.data || body;
+        const apps = dataLayer?.applications;
+
+        let count = 0;
+        if (Array.isArray(apps)) {
+          count = apps.length;
+        } else if (Array.isArray(dataLayer)) {
+          count = dataLayer.length;
+        }
+
+        counts[job.id] = count;
+        totalAll += count;
+      } catch {
+        counts[job.id] = 0;
+      }
+    })
+  );
+
+  setApplicantCounts(counts);
+  setTotalApplications(totalAll);
+};
 
   const fetchJobs = useCallback(async (page: number) => {
     try {
@@ -109,10 +144,12 @@ const CompanyJobManage: React.FC = () => {
       const data = await apiClient.get<JobListResponse>(
         `/jobs/company/owned?page=${page}&limit=${pageSize}`
       );
-      setJobs(data.data ?? []);
+      const jobList = data.data ?? [];
+      setJobs(jobList);
       setTotalItems(data.total ?? 0);
       setTotalPages(Math.ceil((data.total ?? 0) / pageSize));
       setCurrentPage(data.page ?? page);
+      loadApplicantCounts(jobList);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Không thể tải danh sách việc làm.");
     } finally {
@@ -144,7 +181,7 @@ const CompanyJobManage: React.FC = () => {
     const newStatus: JobListItem["status"] = job.status === "OPEN" ? "CLOSED" : "OPEN";
     try {
       setTogglingId(job.id);
-      await apiClient.patch(`/jobs/${job.id}`, { status: newStatus });
+      await apiClient.patch(`/jobs/${job.id}/status`, { status: newStatus });
       message.success(`Đã ${newStatus === "OPEN" ? "mở" : "đóng"} tuyển dụng!`);
       fetchJobs(currentPage);
     } catch (err: any) {
@@ -189,9 +226,7 @@ const CompanyJobManage: React.FC = () => {
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-sm text-gray-500">Tổng ứng viên</div>
-            <div className="text-2xl font-bold text-blue-600 mt-1">
-              {jobs.reduce((sum, j) => sum + (j.applicationsCount ?? 0), 0)}
-            </div>
+            <div className="text-3xl font-bold text-blue-600 mt-2">{totalApplications}</div>
           </div>
         </div>
 
@@ -277,8 +312,8 @@ const CompanyJobManage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className="text-sm font-medium text-blue-600">
-                          {job.applicationsCount ?? 0}
+                        <span className="font-semibold text-blue-600">
+                          {applicantCounts[job.id] || 0}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -325,6 +360,10 @@ const CompanyJobManage: React.FC = () => {
                           {/* Delete */}
                           <button
                             onClick={() => {
+                              if ((applicantCounts[job.id] || 0) > 0) {
+                                message.warning("Không thể xóa công việc đã có ứng viên. Vui lòng sử dụng tính năng Đóng tuyển dụng!");
+                                return;
+                              }
                               setJobToDelete(job);
                               setDeleteModalOpen(true);
                             }}

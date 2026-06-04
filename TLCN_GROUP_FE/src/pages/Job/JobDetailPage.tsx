@@ -16,6 +16,8 @@ import {
   Breadcrumb,
   List,
   Empty,
+  Input,
+  Modal,
 } from "antd";
 import {
   CheckCircleOutlined,
@@ -107,6 +109,10 @@ const JobDetailPage: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isApplying, setIsApplying] = useState<boolean>(false);
+  const [hasApplied, setHasApplied] = useState<boolean>(false);
+  const [isApplyModalVisible, setIsApplyModalVisible] = useState<boolean>(false);
+  const [coverLetter, setCoverLetter] = useState<string>("");
+  const [cvLink, setCvLink] = useState<string>("");
 
   // ── Fetch skill-gap + learning-path concurrently ────────────────────────
   useEffect(() => {
@@ -116,16 +122,47 @@ const JobDetailPage: React.FC = () => {
       try {
         setIsLoading(true);
 
-        const [skillGapRes, learningPathRes] = await Promise.all([
-          apiClient.get<SkillGapResponse>(`/jobs/${id}/skill-gap`),
-          apiClient.get<LearningPathResponse>(`/jobs/${id}/learning-path`),
-        ]);
+        // 1. Lấy thông tin cơ bản của công việc (API Public - Bất kỳ Role nào cũng gọi được)
+        const jobRes: any = await apiClient.get(`/jobs/${id}`);
+        const baseJobInfo = jobRes?.data?.data || jobRes?.data || jobRes;
 
-        setJobData(skillGapRes);
-        setLearningPath(learningPathRes);
+        // Thiết lập khung dữ liệu mặc định để không làm vỡ UI khi Admin/Company truy cập
+        let finalJobData: any = {
+          jobInfo: baseJobInfo,
+          matchPercentage: 0,
+          skillGap: { required: [], niceToHave: [] }
+        };
+        let finalLearningPath: any = { mustLearn: [], niceToKnow: [] };
+
+        // 2. Thử lấy các dữ liệu đặc quyền của Sinh viên (Bọc try-catch riêng để bảo vệ luồng chính)
+        try {
+          const [skillGapRes, learningPathRes] = await Promise.all([
+            apiClient.get(`/jobs/${id}/skill-gap`),
+            apiClient.get(`/jobs/${id}/learning-path`),
+          ]);
+
+          // Nếu là Sinh viên (không văng lỗi 403), ghi đè dữ liệu phân tích AI
+          if (skillGapRes) finalJobData = skillGapRes;
+          if (learningPathRes) finalLearningPath = learningPathRes;
+
+          // Kiểm tra trạng thái nút nộp đơn (Đã được thêm từ phiên trước)
+          const appliedRes: any = await apiClient.get("/jobs/student/applied");
+          const appliedList = appliedRes?.data || appliedRes || [];
+          if (Array.isArray(appliedList)) {
+            const alreadyApplied = appliedList.some((app: any) => app.jobPostingId === id || app?.jobPosting?.id === id);
+            setHasApplied(alreadyApplied); // Bắt buộc bạn phải giữ state hasApplied đã tạo
+          }
+        } catch (studentErr) {
+          // Nuốt lỗi 403 một cách im lặng. Admin/Company sẽ hiển thị Job info cơ bản + Match = 0%
+          console.warn("Bỏ qua các API của Sinh viên do sai Role.");
+        }
+
+        setJobData(finalJobData);
+        setLearningPath(finalLearningPath);
+
       } catch (err: any) {
         const serverMsg = err?.response?.data?.message;
-        message.error(serverMsg || "Không thể tải dữ liệu việc làm.");
+        message.error(serverMsg || "Không thể tải chi tiết việc làm.");
       } finally {
         setIsLoading(false);
       }
@@ -134,15 +171,28 @@ const JobDetailPage: React.FC = () => {
     fetchData();
   }, [id]);
 
-  // ── Apply handler ───────────────────────────────────────────────────────
-  const handleApply = async () => {
+  // ── Apply handlers ───────────────────────────────────────────────────────
+  const handleOpenModal = () => {
+    setIsApplyModalVisible(true);
+  };
+
+  const handleSubmitApplication = async () => {
     if (!id) return;
     try {
       setIsApplying(true);
+
+      const formattedLink = cvLink.trim() ? `[Link CV]: ${cvLink.trim()}` : "[Link CV]: Không đính kèm";
+      const formattedLetter = coverLetter.trim() ? coverLetter.trim() : "Ứng viên nộp hồ sơ từ hệ thống.";
+      const finalPayload = `${formattedLink}\n\n[Thư ứng tuyển]:\n${formattedLetter}`;
+
       await apiClient.post(`/jobs/${id}/apply`, {
-        coverLetter: "CV ứng tuyển từ hệ thống.",
+        coverLetter: finalPayload,
       });
       message.success("Ứng tuyển thành công!");
+      setHasApplied(true);
+      setIsApplyModalVisible(false);
+      setCvLink("");
+      setCoverLetter("");
     } catch (err: any) {
       const serverMsg = err?.response?.data?.message;
       message.error(serverMsg || "Ứng tuyển thất bại. Vui lòng thử lại.");
@@ -260,14 +310,14 @@ const JobDetailPage: React.FC = () => {
             {/* Apply Button — at bottom of left column */}
             <Space orientation="vertical" style={{ marginTop: 24 }} className="w-full">
               <Button
-                type="primary"
+                type={hasApplied ? "default" : "primary"}
                 size="large"
                 block
                 loading={isApplying}
-                disabled={(matchPercentage) < 50 || isApplying}
-                onClick={handleApply}
+                disabled={hasApplied || matchPercentage < 50 || isApplying}
+                onClick={handleOpenModal}
               >
-                Ứng tuyển ngay
+                {hasApplied ? "Đã ứng tuyển" : "Ứng tuyển ngay"}
               </Button>
               {matchPercentage < 50 && (
                 <Typography.Text
@@ -424,6 +474,44 @@ const JobDetailPage: React.FC = () => {
           </Col>
         </Row>
       </div>
+
+      {/* Modal Ứng tuyển */}
+      <Modal
+        title="Ứng tuyển vị trí này"
+        open={isApplyModalVisible}
+        onCancel={() => setIsApplyModalVisible(false)}
+        onOk={handleSubmitApplication}
+        confirmLoading={isApplying}
+        okText="Nộp hồ sơ"
+        cancelText="Hủy"
+      >
+        <div className="mt-2">
+          <div className="mb-4">
+            <Typography.Text className="block mb-2 font-medium">Link CV (Google Drive, Notion...):</Typography.Text>
+            <Input
+              placeholder="Dán đường dẫn CV (đã mở quyền truy cập) vào đây..."
+              value={cvLink}
+              onChange={(e) => setCvLink(e.target.value)}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              * Mẹo: Nhà tuyển dụng sẽ xem trực tiếp CV qua đường link này.
+            </Typography.Text>
+          </div>
+
+          <div className="mb-4">
+            <Typography.Text className="block mb-2 font-medium">Thư ứng tuyển (Cover Letter):</Typography.Text>
+            <Input.TextArea
+              rows={4}
+              placeholder="Giới thiệu ngắn gọn về bản thân, kinh nghiệm và lý do bạn phù hợp..."
+              value={coverLetter}
+              onChange={(e) => setCoverLetter(e.target.value)}
+            />
+          </div>
+        </div>
+        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          * Thông tin phân tích Kỹ năng (AI Match) sẽ được tự động đính kèm gửi đến Nhà tuyển dụng.
+        </Typography.Text>
+      </Modal>
     </div>
   );
 };

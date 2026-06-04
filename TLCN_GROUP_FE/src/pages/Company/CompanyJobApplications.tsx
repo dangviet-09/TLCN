@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import {
   Row,
   Col,
@@ -71,12 +72,28 @@ const COVER_LETTER_MAX_LENGTH = 80;
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const CompanyJobApplicationsPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>(); // Lấy ID từ URL (nếu có)
+
   // ── State ────────────────────────────────────────────────────────────────
   const [ownedJobs, setOwnedJobs] = useState<JobInfo[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(id || null); // Gán ngay ID từ URL thay vì null
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [isJobsLoading, setIsJobsLoading] = useState<boolean>(false);
   const [isAppsLoading, setIsAppsLoading] = useState<boolean>(false);
+
+  // Đồng bộ ID nếu URL thay đổi
+  useEffect(() => {
+    if (id) {
+      setSelectedJobId(id);
+    }
+  }, [id]);
+
+  // UX Tối ưu: Nếu không có ID trên URL, tự động chọn công việc đầu tiên trong danh sách để tránh màn hình trắng
+  useEffect(() => {
+    if (!id && !selectedJobId && ownedJobs.length > 0) {
+      setSelectedJobId(ownedJobs[0].id);
+    }
+  }, [id, selectedJobId, ownedJobs]);
 
   // ── fetchOwnedJobs — fires on mount ─────────────────────────────────────
   const fetchOwnedJobs = useCallback(async () => {
@@ -160,25 +177,57 @@ const CompanyJobApplicationsPage: React.FC = () => {
         if (!record.coverLetter) {
           return <Text type="secondary" italic>Không có</Text>;
         }
+
+        const linkRegex = /\[Link CV\]:\s*(.*?)(?=\n\n\[Thư ứng tuyển\]:|$)/;
+        const letterRegex = /\[Thư ứng tuyển\]:\n([\s\S]*)/;
+
+        const linkMatch = record.coverLetter.match(linkRegex);
+        const letterMatch = record.coverLetter.match(letterRegex);
+
+        const link = linkMatch && linkMatch[1] !== "Không đính kèm" ? linkMatch[1].trim() : null;
+        const letter = letterMatch ? letterMatch[1].trim() : record.coverLetter;
+
         const truncated =
-          record.coverLetter.length > COVER_LETTER_MAX_LENGTH
-            ? record.coverLetter.slice(0, COVER_LETTER_MAX_LENGTH) + "…"
-            : record.coverLetter;
+          letter.length > COVER_LETTER_MAX_LENGTH
+            ? letter.slice(0, COVER_LETTER_MAX_LENGTH) + "…"
+            : letter;
 
         return (
-          <Popover
-            content={
-              <div style={{ maxWidth: 480, whiteSpace: "pre-wrap" }}>
-                {record.coverLetter}
-              </div>
-            }
-            title="Thư ứng tuyển"
-            trigger="click"
-          >
-            <Button type="link" size="small" style={{ padding: 0 }}>
-              {truncated}
-            </Button>
-          </Popover>
+          <div className="flex flex-col items-start gap-2 max-w-xs">
+            {link && (
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-md hover:bg-blue-600 hover:text-white transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Xem CV đính kèm
+              </a>
+            )}
+
+            {letter && letter !== "Không đính kèm" && (
+              <Popover
+                content={
+                  <div style={{ maxWidth: 480, whiteSpace: "pre-wrap" }}>
+                    {letter}
+                  </div>
+                }
+                title="Thư ứng tuyển"
+                trigger="click"
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, whiteSpace: "normal", textAlign: "left", height: "auto", display: "block" }}
+                >
+                  {truncated}
+                </Button>
+              </Popover>
+            )}
+          </div>
         );
       },
     },

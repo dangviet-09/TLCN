@@ -131,6 +131,9 @@ class JobPostingController {
         return res.status(403).json({ status: 403, message: 'Truy cập bị từ chối. Chỉ sinh viên mới có hồ sơ kỹ năng.' });
       }
 
+      // Tăng lượt xem 1 lần duy nhất khi sinh viên gọi API
+      await jobPostingService.incrementViewCount(req.params.id);
+
       const result = await jobPostingService.analyzeSkillGap(student.id, req.params.id);
       return res.status(200).json({ status: 200, data: result });
     } catch (error) {

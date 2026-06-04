@@ -39,6 +39,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false
+    },
+    skills: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+      allowNull: true
     }
   }, {
     tableName: 'career_paths',

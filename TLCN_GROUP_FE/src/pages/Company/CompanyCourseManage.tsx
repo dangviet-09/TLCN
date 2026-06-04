@@ -28,6 +28,7 @@ interface CourseFormValues {
   level?: string;
   isFeatured?: boolean;
   publishedAt?: dayjs.Dayjs;
+  skills?: string[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ const CompanyCourseManage: React.FC = () => {
         category: values.category || null,
         level: values.level || null,
         isFeatured: values.isFeatured ?? false,
+        skills: values.skills ?? [],
       };
       if (values.publishedAt) {
         payload.publishedAt = values.publishedAt.toISOString();
@@ -177,6 +179,23 @@ const CompanyCourseManage: React.FC = () => {
       width: 90,
       align: "center",
       render: (v: boolean) => (v ? <Star className="w-4 h-4 text-yellow-500 mx-auto" fill="currentColor" /> : null),
+    },
+    {
+      title: "Kỹ năng",
+      dataIndex: "skills",
+      key: "skills",
+      width: 200,
+      render: (skills: string[] | null) =>
+        skills && skills.length > 0 ? (
+          <>
+            {skills.slice(0, 3).map((skill) => (
+              <Tag key={skill} color="purple">{skill}</Tag>
+            ))}
+            {skills.length > 3 && (
+              <Tag>+{skills.length - 3}</Tag>
+            )}
+          </>
+        ) : <Tag>—</Tag>,
     },
     {
       title: "Ngày tạo",
@@ -318,6 +337,15 @@ const CompanyCourseManage: React.FC = () => {
               <Switch />
             </Form.Item>
           </div>
+
+          <Form.Item name="skills" label="Kỹ năng cốt lõi">
+            <Select
+              mode="tags"
+              style={{ width: '100%' }}
+              placeholder="Nhập kỹ năng và ấn Enter (VD: ReactJS, NodeJS)..."
+              tokenSeparators={[',']}
+            />
+          </Form.Item>
 
           <div className="flex justify-end gap-3 mt-6">
             <Button onClick={() => setCreateModalOpen(false)}>Hủy</Button>

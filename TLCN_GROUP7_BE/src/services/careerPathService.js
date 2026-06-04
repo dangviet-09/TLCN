@@ -55,15 +55,31 @@ class CareerPathService {
     } else {
       throw new Error('Bạn không có quyền tạo career path');
     }
-    // Tạo CareerPath trước
+    // Xu ly skills - parse an toan (FormData gui len stringified JSON)
+    let parsedSkills = [];
+    if (data.skills !== undefined && data.skills !== null) {
+      if (Array.isArray(data.skills)) {
+        parsedSkills = data.skills;
+      } else if (typeof data.skills === 'string') {
+        try {
+          const parsed = JSON.parse(data.skills);
+          parsedSkills = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          parsedSkills = [];
+        }
+      }
+    }
+
+    // Tao CareerPath
     const careerPath = await db.CareerPath.create({
       title: data.title,
       description: data.description || null,
       category: data.category || null,
-      companyId: companyIdForPath, // Company ID hoặc System Company cho ADMIN
+      companyId: companyIdForPath, // Company ID hoac System Company cho ADMIN
       image: null,
       publicId: null,
-      status: data.status || 'DRAFT'
+      status: data.status || 'DRAFT',
+      skills: parsedSkills
     });
 
     // Nếu có upload ảnh
@@ -115,10 +131,26 @@ class CareerPathService {
       throw new Error("Bạn không có quyền chỉnh sửa");
     }
 
+    // Xu ly skills - parse an toan (FormData gui len stringified JSON)
+    let parsedSkills = undefined;
+    if (data.skills !== undefined && data.skills !== null) {
+      if (Array.isArray(data.skills)) {
+        parsedSkills = data.skills;
+      } else if (typeof data.skills === 'string') {
+        try {
+          const parsed = JSON.parse(data.skills);
+          parsedSkills = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          parsedSkills = [];
+        }
+      }
+    }
+
     await course.update({
       title: data.title ?? course.title,
       description: data.description ?? course.description,
-      status: data.status ?? course.status
+      status: data.status ?? course.status,
+      ...(parsedSkills !== undefined && { skills: parsedSkills })
     });
 
     if (data.fileBase64) {

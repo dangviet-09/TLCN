@@ -14,6 +14,8 @@ import {
   Skeleton,
   Empty,
   Radio,
+  Modal,
+  DatePicker,
 } from "antd";
 import { Button } from "../../components/atoms/Button/Button";
 import dayjs from "dayjs";
@@ -51,6 +53,7 @@ interface Course {
   status: string;
   isFeatured: boolean;
   publishedAt: string | null;
+  skills?: string[];
   lessons: Lesson[];
 }
 
@@ -100,6 +103,11 @@ const CompanyCourseEdit: React.FC = () => {
   const [submitLessonLoading, setSubmitLessonLoading] = useState(false);
   const [deleteLessonLoading, setDeleteLessonLoading] = useState<string | number | null>(null);
   const [publishing, setPublishing] = useState(false);
+
+  // ── Edit Course state ──────────────────────────────────────────────────────────
+  const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+  const [updateCourseLoading, setUpdateCourseLoading] = useState(false);
+  const [courseForm] = Form.useForm();
 
   // ── Watch lesson type for dynamic form sections ───────────────────────────
 
@@ -352,6 +360,57 @@ const CompanyCourseEdit: React.FC = () => {
     }
   };
 
+  // ── Edit Course handlers ───────────────────────────────────────────────────────
+  const handleOpenEditCourse = () => {
+    if (!course) return;
+    courseForm.setFieldsValue({
+      title: course.title,
+      description: course.description,
+      category: course.category,
+      level: course.level,
+      isFeatured: course.isFeatured,
+      publishedAt: course.publishedAt ? dayjs(course.publishedAt) : undefined,
+      skills: course.skills ?? [],
+    });
+    setShowEditCourseModal(true);
+  };
+
+  const handleUpdateCourse = async (values: {
+    title: string;
+    description?: string;
+    category?: string;
+    level?: string;
+    isFeatured?: boolean;
+    publishedAt?: dayjs.Dayjs;
+    skills?: string[];
+  }) => {
+    if (!courseId) return;
+    setUpdateCourseLoading(true);
+    try {
+      const payload: Record<string, unknown> = {
+        title: values.title.trim(),
+        description: values.description?.trim() || null,
+        category: values.category || null,
+        level: values.level || null,
+        isFeatured: values.isFeatured ?? false,
+        skills: values.skills ?? [],
+      };
+      if (values.publishedAt) {
+        payload.publishedAt = values.publishedAt.toISOString();
+      }
+      await apiClient.put(`/courses/${courseId}`, payload);
+      message.success("Cập nhật thông tin khóa học thành công!");
+      setShowEditCourseModal(false);
+      await refreshCourse();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Cập nhật khóa học thất bại."
+      );
+    } finally {
+      setUpdateCourseLoading(false);
+    }
+  };
+
   // ── Render: Loading / Error ────────────────────────────────────────────────
 
   if (fetching) {
@@ -417,9 +476,14 @@ const CompanyCourseEdit: React.FC = () => {
       <div className="px-6 py-6 max-w-4xl mx-auto space-y-6">
         {/* Course meta info */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">
-            Thông tin khóa học
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-base font-semibold text-gray-900">
+              Thông tin khóa học
+            </h2>
+            <AntButton size="small" onClick={handleOpenEditCourse}>
+              Chỉnh sửa
+            </AntButton>
+          </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Danh mục: </span>
@@ -444,6 +508,16 @@ const CompanyCourseEdit: React.FC = () => {
             <div className="col-span-2">
               <span className="text-gray-500">Mô tả: </span>
               <span className="font-medium">{course.description || "—"}</span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-gray-500">Kỹ năng cốt lõi: </span>
+              {course.skills && course.skills.length > 0 ? (
+                course.skills.map((skill) => (
+                  <Tag key={skill} color="purple" className="ml-1">{skill}</Tag>
+                ))
+              ) : (
+                <span className="font-medium">—</span>
+              )}
             </div>
           </div>
         </div>
@@ -535,6 +609,88 @@ const CompanyCourseEdit: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ── EditCourseModal ───────────────────────────────────────────────────── */}
+      <Modal
+        title="Chỉnh sửa thông tin khóa học"
+        open={showEditCourseModal}
+        onCancel={() => setShowEditCourseModal(false)}
+        footer={null}
+        destroyOnClose
+        width={600}
+      >
+        <Form
+          form={courseForm}
+          layout="vertical"
+          onFinish={handleUpdateCourse}
+          className="mt-4"
+        >
+          <Form.Item
+            name="title"
+            label="Tiêu đề khóa học"
+            rules={[{ required: true, message: "Vui lòng nhập tiêu đề khóa học." }]}
+          >
+            <Input placeholder="VD: ReactJS Thực chiến từ Zero đến Hero" />
+          </Form.Item>
+
+          <Form.Item name="description" label="Mô tả">
+            <Input.TextArea rows={3} placeholder="Mô tả ngắn về khóa học..." />
+          </Form.Item>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item name="category" label="Danh mục">
+              <Select placeholder="Chọn danh mục" allowClear>
+                <Select.Option value="FRONTEND">Frontend</Select.Option>
+                <Select.Option value="BACKEND">Backend</Select.Option>
+                <Select.Option value="FULLSTACK">Fullstack</Select.Option>
+                <Select.Option value="MOBILE">Mobile</Select.Option>
+                <Select.Option value="AI">AI / Machine Learning</Select.Option>
+                <Select.Option value="DEVOPS">DevOps</Select.Option>
+                <Select.Option value="DATABASE">Database</Select.Option>
+                <Select.Option value="OTHER">Khác</Select.Option>
+              </Select>
+            </Form.Item>
+
+            <Form.Item name="level" label="Cấp độ">
+              <Select placeholder="Chọn cấp độ" allowClear>
+                <Select.Option value="BEGINNER">Người mới bắt đầu</Select.Option>
+                <Select.Option value="INTERMEDIATE">Trung cấp</Select.Option>
+                <Select.Option value="ADVANCED">Nâng cao</Select.Option>
+              </Select>
+            </Form.Item>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item name="publishedAt" label="Ngày xuất bản (tùy chọn)">
+              <DatePicker className="w-full" placeholder="Chọn ngày" />
+            </Form.Item>
+
+            <Form.Item
+              name="isFeatured"
+              label="Khóa học nổi bật"
+              valuePropName="checked"
+            >
+              <Switch />
+            </Form.Item>
+          </div>
+
+          <Form.Item name="skills" label="Kỹ năng cốt lõi">
+            <Select
+              mode="tags"
+              style={{ width: '100%' }}
+              placeholder="Nhập kỹ năng và ấn Enter (VD: ReactJS, NodeJS)..."
+              tokenSeparators={[',']}
+            />
+          </Form.Item>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <AntButton onClick={() => setShowEditCourseModal(false)}>Hủy</AntButton>
+            <AntButton type="primary" htmlType="submit" loading={updateCourseLoading}>
+              {updateCourseLoading ? "Đang cập nhật…" : "Cập nhật"}
+            </AntButton>
+          </div>
+        </Form>
+      </Modal>
 
       {/* ── EditLessonModal overlay (replaces inline Modal) ─────────────────── */}
       {!showEditLessonModal ? null : (

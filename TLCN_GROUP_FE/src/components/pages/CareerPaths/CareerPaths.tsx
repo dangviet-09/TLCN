@@ -3,15 +3,14 @@ import MainTemplate from '../../templates/MainTemplate/MainTemplate';
 import { AddTestModal } from '../../molecules/AddTestModal';
 import { Button } from '../../atoms/Button/Button';
 import { ProtectedRoute } from '../../ProtectedRoute';
-import StudentSettingsForm from '../../molecules/StudentSettingsForm';
-import CompanySettingsForm from '../../molecules/CompanySettingsForm';
+
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getMyCareerTests, getAllCareerTests, createCareerTest, deleteCareerTest } from '../../../api/careerPathApi';
 import { CareerTest } from '../../../types/types';
 import { Toast } from '../../molecules/ToastNotification';
 
-type ViewType = 'career-paths' | 'profile' | 'settings';
+type ViewType = 'career-paths' | 'profile';
 
 const CareerPathsPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -24,10 +23,8 @@ const CareerPathsPage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
 
-    if (tabParam === 'settings') return 'settings';
     if (tabParam === 'profile') return 'profile';
     if (location.pathname === '/profile') return 'profile';
-    if (location.pathname === '/settings') return 'settings';
     if (location.pathname === '/career-paths') {
       return 'career-paths';
     }
@@ -43,14 +40,10 @@ const CareerPathsPage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
 
-    if (tabParam === 'settings') {
-      setActiveView('settings');
-    } else if (tabParam === 'profile') {
+    if (tabParam === 'profile') {
       setActiveView('profile');
     } else if (location.pathname === '/profile') {
       setActiveView('profile');
-    } else if (location.pathname === '/settings') {
-      setActiveView('settings');
     } else if (location.pathname === '/career-paths') {
       setActiveView('career-paths');
     }
@@ -124,15 +117,6 @@ const CareerPathsPage: React.FC = () => {
 
   const renderContent = () => {
     switch (activeView) {
-
-      case 'settings':
-        return (
-          <div>
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-50">
-              {user?.role === 'COMPANY' ? <CompanySettingsForm /> : <StudentSettingsForm />}
-            </div>
-          </div>
-        );
 
       case 'career-paths':
       default:
@@ -305,23 +289,6 @@ const CareerPathsPage: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-800 mb-6">Navigation</h2>
 
             <nav className="space-y-2 flex-1">
-              <Button
-                variant="unstyled"
-                onClick={() => setActiveView('settings')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${activeView === 'settings'
-                  ? 'bg-blue-50 text-blue-600 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-              >
-                <span className={activeView === 'settings' ? 'text-blue-600' : 'text-gray-400'}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
-                  </svg>
-                </span>
-                <span>Settings</span>
-              </Button>
-
               {/* Career Paths - visible for all roles */}
               <Button
                 variant="unstyled"

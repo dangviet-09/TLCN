@@ -514,7 +514,7 @@ const Navbar: React.FC = () => {
                           </Button>
                         </Link>
 
-                        <Link to="/career-paths" onClick={() => setShowProfileDropdown(false)}>
+                        <Link to="/company/career-tests" onClick={() => setShowProfileDropdown(false)}>
                           <Button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center gap-2 group">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 group-hover:text-purple-600 transition-colors">
                               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
@@ -522,7 +522,7 @@ const Navbar: React.FC = () => {
                               <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
                               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                             </svg>
-                            <span>Career Paths</span>
+                            <span>Manage Career Tests</span>
                           </Button>
                         </Link>
                       </>

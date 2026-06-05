@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Spin,
   Card,
@@ -26,6 +26,8 @@ const { Title, Text } = Typography; // BƯỚC 2: Khai báo chuẩn bóc tách c
 const StudentCareerTestPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isPreview = new URLSearchParams(location.search).get("mode") === "preview";
 
   // --- State ---
   const [testData, setTestData] = useState<CareerTestNew | null>(null);
@@ -65,6 +67,12 @@ const StudentCareerTestPage: React.FC = () => {
 
     fetchTest();
   }, [id]);
+
+  useEffect(() => {
+    if (isPreview && testData) {
+      setHasEnrolled(true);
+    }
+  }, [isPreview, testData]);
 
   // --- Hàm enroll ---
   const handleEnroll = async () => {
@@ -157,15 +165,15 @@ const StudentCareerTestPage: React.FC = () => {
           {/* Tổng quan */}
           <div style={{ marginBottom: 16 }}>
             <Tag
-              color={result.score >= 70 ? "green" : result.score >= 40 ? "orange" : "red"}
+              color={(result as any).percentComplete >= 70 ? "green" : (result as any).percentComplete >= 40 ? "orange" : "red"}
               style={{ fontSize: 16, padding: "4px 12px" }}
             >
-              {result.score >= 70 ? "Xuất sắc" : result.score >= 40 ? "Đạt yêu cầu" : "Cần cải thiện"}
+              {(result as any).percentComplete >= 70 ? "Xuất sắc" : (result as any).percentComplete >= 40 ? "Đạt yêu cầu" : "Cần cải thiện"}
             </Tag>
             <div style={{ marginTop: 12 }}>
               <Text strong>Điểm: </Text>
               <Text style={{ fontSize: 18, color: "#1890ff" }}>
-                {result.score} / 100
+                {result.score} / {(result as any).maxScore || 100}
               </Text>
             </div>
             <div>
@@ -349,6 +357,7 @@ const StudentCareerTestPage: React.FC = () => {
                         <Radio
                           key={opt.value}
                           value={opt.value}
+                          disabled={isPreview}
                           style={{
                             fontSize: 15,
                             padding: "8px 12px",
@@ -373,6 +382,7 @@ const StudentCareerTestPage: React.FC = () => {
                     onChange={(e) =>
                       setAnswers({ ...answers, [index]: e.target.value })
                     }
+                    disabled={isPreview}
                     placeholder="Nhập câu trả lời của bạn..."
                     rows={4}
                     style={{ fontSize: 15 }}
@@ -389,20 +399,22 @@ const StudentCareerTestPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Nút nộp bài */}
-          <div style={{ textAlign: "center", marginTop: 8 }}>
-            <Button
-              type="primary"
-              size="large"
-              onClick={handleSubmit}
-              loading={submitting}
-              disabled={
-                Object.keys(answers).length < totalQuestions || submitting
-              }
-            >
-              Nộp bài
-            </Button>
-          </div>
+          {/* Nút nộp bài (Ẩn trong chế độ Preview) */}
+          {!isPreview && (
+            <div style={{ textAlign: "center", marginTop: 8 }}>
+              <Button
+                type="primary"
+                size="large"
+                onClick={handleSubmit}
+                loading={submitting}
+                disabled={
+                  Object.keys(answers).length < totalQuestions || submitting
+                }
+              >
+                Nộp bài
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -282,5 +282,30 @@ class StudentService {
 
     return student;
   }
+
+  async upsertStudentSkills(studentId, skillsArray, pointsToAdd = 10) {
+    if (!skillsArray || skillsArray.length === 0) return;
+
+    for (const skill of skillsArray) {
+      if (typeof skill !== 'string') continue;
+
+      const cleanSkill = skill.trim();
+      if (!cleanSkill) continue;
+
+      const [skillRecord, created] = await db.StudentSkill.findOrCreate({
+        where: {
+          studentId: studentId,
+          skillName: cleanSkill
+        },
+        defaults: {
+          score: pointsToAdd
+        }
+      });
+
+      if (!created) {
+        await skillRecord.increment('score', { by: pointsToAdd });
+      }
+    }
+  }
 }
 module.exports = new StudentService(); 

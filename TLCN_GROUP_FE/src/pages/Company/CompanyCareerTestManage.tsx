@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../services/apiClient";
 import {
   Pencil,
@@ -45,6 +46,8 @@ export interface CareerTestListItem {
   id: string;
   title: string;
   description?: string;
+  level?: string;
+  skills?: string[];
   questions?: CareerTestQuestion[];
   createdAt: string;
   updatedAt?: string;
@@ -71,6 +74,8 @@ export interface CareerTestListResponse {
 export interface CareerTestPayload {
   title: string;
   description?: string;
+  level?: string;
+  skills?: string[];
   questions: CareerTestQuestion[];
 }
 
@@ -98,6 +103,7 @@ const formatDate = (dateStr: string) => {
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const CompanyCareerTestManage: React.FC = () => {
+  const navigate = useNavigate();
   // ── Table state ──────────────────────────────────────────────────────────────
   const [tests, setTests] = useState<CareerTestListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,6 +181,8 @@ const CompanyCareerTestManage: React.FC = () => {
       await apiClient.post("/career-tests", {
         title: values.title.trim(),
         description: values.description?.trim(),
+        level: values.level || "FRESHER",
+        skills: values.skills || [],
         questions: sanitizedQuestions,
       });
       message.success("Tạo bài test thành công!");
@@ -216,6 +224,8 @@ const CompanyCareerTestManage: React.FC = () => {
       await apiClient.put(`/career-tests/${id}`, {
         title: values.title.trim(),
         description: values.description?.trim(),
+        level: values.level,
+        skills: values.skills || [],
         questions: sanitizedQuestions,
       });
       message.success("Cập nhật bài test thành công!");
@@ -282,6 +292,8 @@ const CompanyCareerTestManage: React.FC = () => {
     form.setFieldsValue({
       title: test.title,
       description: test.description ?? "",
+      level: test.level || "FRESHER",
+      skills: test.skills || [],
       questions: test.questions ?? [],
     });
     setModalOpen(true);
@@ -429,6 +441,16 @@ const CompanyCareerTestManage: React.FC = () => {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-center gap-1">
+                          {/* Preview Test */}
+                          <button
+                            onClick={() => navigate(`/career-tests/${test.id}/take?mode=preview`)}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Xem trước đề bài"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                          </button>
                           {/* View Results */}
                           <button
                             onClick={() => openResultsDrawer(test.id)}
@@ -545,6 +567,8 @@ const CompanyCareerTestManage: React.FC = () => {
           layout="vertical"
           onFinish={handleFormSubmit}
           initialValues={{
+            level: "FRESHER",
+            skills: [],
             questions: [],
           }}
         >
@@ -562,6 +586,28 @@ const CompanyCareerTestManage: React.FC = () => {
             <Input.TextArea
               rows={2}
               placeholder="Mô tả ngắn về bài test..."
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="level"
+            label="Level"
+            rules={[{ required: true, message: "Chọn cấp độ bài test." }]}
+          >
+            <Select placeholder="Chọn cấp độ">
+              <Select.Option value="FRESHER">FRESHER</Select.Option>
+              <Select.Option value="JUNIOR">JUNIOR</Select.Option>
+              <Select.Option value="MIDIOR">MIDIOR</Select.Option>
+              <Select.Option value="SENIOR">SENIOR</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="skills" label="Skills">
+            <Select
+              mode="tags"
+              placeholder="Nhập danh sách kỹ năng mục tiêu, nhấn Enter sau mỗi kỹ năng"
+              tokenSeparators={[","]}
+              style={{ width: "100%" }}
             />
           </Form.Item>
 

@@ -1,6 +1,11 @@
 // services/careerTestService.js
 const db = require('../models');
 
+const getRequiredScoreByLevel = (level) => {
+  const levels = { 'FRESHER': 10, 'JUNIOR': 25, 'MIDIOR': 50, 'SENIOR': 80 };
+  return levels[(level || '').toUpperCase()] || 10;
+};
+
 class CareerTestService {
 
   // ==============================
@@ -21,12 +26,16 @@ class CareerTestService {
       throw new Error('Bạn không có quyền tạo career test');
     }
 
+    const parsedSkills = [...new Set((data.skills || []).map(s => s.trim()).filter(Boolean))];
+
     const careerTest = await db.CareerTest.create({
       title: data.title,
       description: data.description || null,
       questions: data.questions || [],
       careerPathId: data.careerPathId || null,
-      companyId: companyId
+      companyId: companyId,
+      level: data.level || 'FRESHER',
+      skills: parsedSkills
     });
 
     return careerTest;
@@ -50,10 +59,17 @@ class CareerTestService {
       throw new Error('Bạn không có quyền chỉnh sửa career test');
     }
 
+    let parsedSkills;
+    if (Array.isArray(data.skills)) {
+      parsedSkills = [...new Set((data.skills || []).map(s => s.trim()).filter(Boolean))];
+    }
+
     await careerTest.update({
       title: data.title ?? careerTest.title,
       description: data.description ?? careerTest.description,
-      questions: data.questions ?? careerTest.questions
+      questions: data.questions ?? careerTest.questions,
+      level: data.level ?? careerTest.level,
+      ...(parsedSkills !== undefined && { skills: parsedSkills })
     });
 
     return careerTest;
@@ -232,19 +248,53 @@ class CareerTestService {
     );
 
     const score = gradingResult.score || 0;
-    const passed = score >= 60;
+    const maxScore = gradingResult.maxScore || 100;
+    const percentComplete = gradingResult.percentComplete || 0;
+    const passed = percentComplete >= 0.6; // Đạt nếu >= 60%
 
     await existingResult.update({
       answers,
       score,
       passed,
       feedback: gradingResult.feedback,
-      aiGrading: gradingResult,
+      aiGrading: gradingResult, // Chứa cả maxScore và percentComplete
       completedAt: new Date()
     });
 
+    // --- THUẬT TOÁN ĐỒNG BỘ KỸ NĂNG (HIGH-WATER MARK) ---
+    const testLevel = careerTest.level || 'FRESHER';
+    let testSkills = careerTest.skills || [];
+    if (typeof testSkills === 'string') { try { testSkills = JSON.parse(testSkills); } catch { testSkills = []; } }
+
+    if (Array.isArray(testSkills) && testSkills.length > 0) {
+      const targetScorePerSkill = getRequiredScoreByLevel(testLevel);
+      const earnedSkillPoints = Math.round(percentComplete * targetScorePerSkill);
+
+      for (const skillName of testSkills) {
+        const formattedSkillName = (skillName || '').toLowerCase().trim();
+        if (!formattedSkillName) continue;
+
+        const existingSkill = await db.StudentSkill.findOne({
+          where: { studentId, skillName: formattedSkillName }
+        });
+
+        if (!existingSkill) {
+          await db.StudentSkill.create({
+            studentId,
+            skillName: formattedSkillName,
+            score: earnedSkillPoints
+          });
+        } else if (existingSkill.score < earnedSkillPoints) {
+          // Khớp lệnh: Chỉ cộng điểm nếu điểm bài test lớn hơn điểm đang có
+          await existingSkill.update({ score: earnedSkillPoints });
+        }
+      }
+    }
+
     return {
       score,
+      maxScore,
+      percentComplete: Math.round(percentComplete * 100),
       passed,
       feedback: gradingResult.feedback,
       details: gradingResult.details,

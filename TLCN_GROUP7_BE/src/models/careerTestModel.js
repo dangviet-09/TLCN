@@ -18,6 +18,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSON, 
       allowNull: false
     },
+    level: {
+      type: DataTypes.ENUM('FRESHER', 'JUNIOR', 'MIDIOR', 'SENIOR'),
+      defaultValue: 'FRESHER',
+      allowNull: true
+    },
+    skills: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
     // BỔ SUNG CỘT BỊ THIẾU Ở ĐÂY
     companyId: {
       type: DataTypes.UUID,

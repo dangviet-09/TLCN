@@ -40,6 +40,7 @@ interface SkillItem {
   minProficiency?: number;
   proficiency?: number;
   matched?: boolean;
+  isPartiallyMatched?: boolean;
 }
 
 interface SkillGapResponse {
@@ -375,25 +376,27 @@ const JobDetailPage: React.FC = () => {
                     Bắt buộc
                   </Title>
                   <div className="flex flex-wrap gap-2">
-                    {requiredSkills.map((skill, idx) =>
-                      skill.matched ? (
-                        <Tag
-                          key={`req-matched-${idx}`}
-                          color="success"
-                          icon={<CheckCircleOutlined />}
-                        >
+                    {requiredSkills.map((skill, idx) => {
+                      if (skill.matched) {
+                        return (
+                          <Tag key={`req-matched-${idx}`} color="success" icon={<CheckCircleOutlined />}>
+                            {skill.skillName}
+                          </Tag>
+                        );
+                      }
+                      if (skill.isPartiallyMatched) {
+                        return (
+                          <Tag key={`req-partial-${idx}`} color="warning" icon={<CheckCircleOutlined />}>
+                            {skill.skillName}
+                          </Tag>
+                        );
+                      }
+                      return (
+                        <Tag key={`req-missing-${idx}`} color="error" icon={<CloseCircleOutlined />}>
                           {skill.skillName}
                         </Tag>
-                      ) : (
-                        <Tag
-                          key={`req-missing-${idx}`}
-                          color="error"
-                          icon={<CloseCircleOutlined />}
-                        >
-                          {skill.skillName}
-                        </Tag>
-                      )
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -405,25 +408,27 @@ const JobDetailPage: React.FC = () => {
                     Ưu tiên / Điểm cộng
                   </Title>
                   <div className="flex flex-wrap gap-2">
-                    {niceToHaveSkills.map((skill, idx) =>
-                      skill.matched ? (
-                        <Tag
-                          key={`nth-matched-${idx}`}
-                          color="success"
-                          icon={<CheckCircleOutlined />}
-                        >
+                    {niceToHaveSkills.map((skill, idx) => {
+                      if (skill.matched) {
+                        return (
+                          <Tag key={`nth-matched-${idx}`} color="success" icon={<CheckCircleOutlined />}>
+                            {skill.skillName}
+                          </Tag>
+                        );
+                      }
+                      if (skill.isPartiallyMatched) {
+                        return (
+                          <Tag key={`nth-partial-${idx}`} color="warning" icon={<CheckCircleOutlined />}>
+                            {skill.skillName}
+                          </Tag>
+                        );
+                      }
+                      return (
+                        <Tag key={`nth-missing-${idx}`} color="error" icon={<CloseCircleOutlined />}>
                           {skill.skillName}
                         </Tag>
-                      ) : (
-                        <Tag
-                          key={`nth-missing-${idx}`}
-                          color="warning"
-                          icon={<CloseCircleOutlined />}
-                        >
-                          {skill.skillName}
-                        </Tag>
-                      )
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               )}

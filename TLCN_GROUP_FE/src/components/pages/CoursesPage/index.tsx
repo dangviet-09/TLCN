@@ -94,22 +94,6 @@ const CoursesPage: React.FC = () => {
 	return (
 		<MainTemplate>
 			<div className="w-full">
-				{user?.role === "COMPANY" && (
-					<div className="mx-auto w-full max-w-7xl px-4 pt-6">
-						<div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-800 flex items-center justify-between gap-4">
-							<div>
-								<p className="font-semibold">Company actions</p>
-								<p className="text-sm text-blue-700">Create and manage your course modules from the Career Paths workspace.</p>
-							</div>
-							<Link
-								to="/career-paths"
-								className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-							>
-								Go to Career Paths
-							</Link>
-						</div>
-					</div>
-				)}
 				{errorMessage && (
 					<div className="mx-auto w-full max-w-7xl px-4 pt-6">
 						{errorMessage}

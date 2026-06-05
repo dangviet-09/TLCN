@@ -33,6 +33,7 @@ db.ChatSession = require("./chatSessionModel")(sequelize, Sequelize.DataTypes);
 db.CourseSubmission = require("./courseSubmissionModel")(sequelize, Sequelize.DataTypes);
 db.JobPosting = require("./jobPostingModel")(sequelize, Sequelize.DataTypes);
 db.JobApplication = require("./jobApplicationModel")(sequelize, Sequelize.DataTypes);
+db.StudentSkill = require("./studentSkillModel")(sequelize, Sequelize.DataTypes);
 
 
 // Setup associations

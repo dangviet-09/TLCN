@@ -2,6 +2,7 @@ const kafkaModule = require('../kafka');
 const db = require("../models");
 const LessonService = require("./lessonService");
 const TestService = require("./testService");
+const studentService = require("./studentService");
 
 class CourseService {
 
@@ -461,18 +462,13 @@ class CourseService {
   // ==============================
 
   async submitLessonTask(studentId, careerPathId, lessonId, submissionData) {
-    // BẮT BUỘC query kiểm tra lessonId có tồn tại trong bảng db.Lesson không
     const lesson = await db.Lesson.findByPk(lessonId);
     if (!lesson) throw new Error("Lesson không tồn tại");
 
     const rubric = lesson.rubric;
-
-    // Gọi AI grading thực
     const aiService = require('./aiService');
     const aiResult = await aiService.gradeLessonTask(submissionData, rubric, lesson.submissionFields);
 
-    // Lưu vào DB với BẮT BUỘC các trường: studentId, lessonId, careerPathId,
-    // submissionData (JSON), score, aiGrading, status: 'GRADED', submittedAt, gradedAt
     const submission = await db.CourseSubmission.create({
       studentId,
       lessonId,
@@ -485,6 +481,44 @@ class CourseService {
       gradedAt: new Date()
     });
 
+    // --- XỬ LÝ TIẾN ĐỘ & CỘNG ĐIỂM THEO TRỌNG SỐ ---
+    // Tiêu chí Pass: Điểm >= 3
+    if (aiResult.score >= 3) {
+      const progress = await db.StudentProgress.findOne({
+        where: { studentId, careerPathId }
+      });
+
+      if (progress) {
+        const lessons = await db.Lesson.findAll({
+          where: { careerPathId },
+          order: [["order", "ASC"]],
+          attributes: ['id', 'order']
+        });
+
+        const currentIndex = lessons.findIndex(l => l.id === lessonId);
+        const nextLesson = lessons[currentIndex + 1] || null;
+
+        await progress.update({
+          status: 'IN_PROGRESS',
+          lastCompletedLessonId: lessonId,
+          currentLessonId: nextLesson ? nextLesson.id : progress.currentLessonId
+        });
+
+        // Nếu là bài học cuối cùng -> Hoàn thành khóa học
+        if (!nextLesson) {
+          await progress.update({ status: 'COMPLETED' });
+
+          const course = await db.CareerPath.findByPk(careerPathId);
+          if (course && course.skills && course.skills.length > 0) {
+            // Trọng số: Làm tròn điểm AI chấm để đẩy vào cột INT của DB (VD: 8.5đ -> 9 điểm)
+            const pointsToAdd = Math.max(1, Math.round(Number(aiResult.score) || 0));
+            const studentService = require('./studentService');
+            await studentService.upsertStudentSkills(studentId, course.skills, pointsToAdd);
+          }
+        }
+      }
+    }
+
     return submission;
   }
 
@@ -496,7 +530,26 @@ class CourseService {
     const lesson = await db.Lesson.findByPk(lessonId);
     if (!lesson) throw new Error("Lesson không tồn tại");
     if (lesson.careerPathId !== courseId) throw new Error("Lesson không thuộc course này");
-    if (lesson.type !== 'THEORY') throw new Error("Lesson này không phải loại THEORY");
+    // --- XỬ LÝ CHUYỂN TIẾP CHO BÀI TASK ---
+    if (lesson.type === 'TASK') {
+      // Kiểm tra xem sinh viên đã có bài nộp đạt điểm >= 3 chưa
+      const submission = await db.CourseSubmission.findOne({
+        where: { studentId, lessonId, careerPathId: courseId },
+        order: [['createdAt', 'DESC']]
+      });
+
+      if (!submission || submission.score < 3) {
+        throw new Error("Bạn phải nộp bài thực hành và đạt từ 3 điểm trở lên mới được đánh dấu hoàn thành!");
+      }
+
+      // VÌ hàm submitLessonTask ĐÃ cập nhật tiến độ và cộng điểm kỹ năng rồi,
+      // Ta chỉ cần trả về progress hiện tại để Frontend chuyển bài, KHÔNG chạy tiếp logic THEORY bên dưới để tránh nhân đôi điểm.
+      const progress = await db.StudentProgress.findOne({
+        where: { studentId, careerPathId: courseId }
+      });
+      return progress;
+    }
+    // --- HẾT PHẦN XỬ LÝ TASK ---
 
     const student = await db.Student.findOne({ where: { id: studentId } });
     if (!student) throw new Error("Student không tồn tại");
@@ -522,9 +575,16 @@ class CourseService {
       currentLessonId: nextLesson ? nextLesson.id : progress.currentLessonId
     });
 
-    // Nếu là lesson cuối cùng → đánh dấu COMPLETED
+    // Nếu là lesson cuối cùng → đánh dấu COMPLETED và Kích hoạt thuật toán cộng điểm
     if (!nextLesson) {
       await progress.update({ status: 'COMPLETED' });
+
+      // Lấy thông tin khóa học để trích xuất mảng kỹ năng
+      const course = await db.CareerPath.findByPk(courseId);
+      if (course && course.skills && course.skills.length > 0) {
+        // Kích hoạt UPSERT: Cộng 10 điểm cho mỗi kỹ năng vào hồ sơ AI Match
+        await studentService.upsertStudentSkills(studentId, course.skills, 10);
+      }
     }
 
     return progress;

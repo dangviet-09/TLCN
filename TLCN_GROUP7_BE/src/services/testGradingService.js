@@ -340,15 +340,11 @@ QUY TẮC TÍNH ĐIỂM:
 
 OUTPUT FORMAT — BẮT BUỘC JSON (không có text khác):
 {
-  "score": <number 0-100>,
-  "correctCount": <number>,
-  "totalQuestions": <number>,
   "feedback": "<nhận xét chung ngắn 1-3 câu>",
   "details": [
     {
       "questionIndex": <number>,
       "type": "<MULTIPLE_CHOICE|SHORT_ANSWER>",
-      "maxPoints": <number>,
       "earnedPoints": <number>,
       "isCorrect": <boolean>,
       "explanation": "<giải thích ngắn 1-2 câu>"
@@ -384,12 +380,31 @@ KHÔNG thêm field "suggestions" trong kết quả chấm điểm này.
         throw new Error('Lỗi parse kết quả chấm điểm từ LLM');
       }
 
-      // Validate required fields
-      gradingResult.score = typeof gradingResult.score === 'number' ? gradingResult.score : 0;
       gradingResult.details = Array.isArray(gradingResult.details) ? gradingResult.details : [];
       gradingResult.feedback = gradingResult.feedback || 'Không có nhận xét';
-      gradingResult.correctCount = typeof gradingResult.correctCount === 'number' ? gradingResult.correctCount : 0;
-      gradingResult.totalQuestions = typeof gradingResult.totalQuestions === 'number' ? gradingResult.totalQuestions : questions.length;
+
+      let totalMaxScore = 0;
+      let totalEarnedScore = 0;
+      let correctCount = 0;
+
+      gradingResult.details = gradingResult.details.map(d => {
+        const q = questions[d.questionIndex];
+        const maxP = Number(q?.points) || 10;
+        const earned = Number(d.earnedPoints) || 0;
+
+        totalMaxScore += maxP;
+        totalEarnedScore += earned;
+        if (d.isCorrect) correctCount++;
+
+        return { ...d, maxPoints: maxP };
+      });
+
+      // Gắn lại các thông số chuẩn toán học
+      gradingResult.score = totalEarnedScore;
+      gradingResult.maxScore = totalMaxScore || 100;
+      gradingResult.percentComplete = totalMaxScore > 0 ? (totalEarnedScore / totalMaxScore) : 0;
+      gradingResult.correctCount = correctCount;
+      gradingResult.totalQuestions = questions.length;
 
       // === BƯỚC 4: VECTOR SEARCH CHO SUGGESTIONS ===
       const failedQuestions = gradingResult.details.filter(d => !d.isCorrect);

@@ -70,6 +70,21 @@ class CareerPathService {
       }
     }
 
+    // Chuan hoa: trim + loai bo trung lap khong phan biet hoa thuong
+    if (parsedSkills && parsedSkills.length > 0) {
+      const seen = new Set();
+      parsedSkills = parsedSkills.filter((skill) => {
+        const lower = skill.trim().toLowerCase();
+        if (seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      }).map((skill) => skill.trim());
+    }
+
+    if (!parsedSkills || parsedSkills.length === 0) {
+      throw new Error("Bắt buộc phải có ít nhất 1 kỹ năng cốt lõi");
+    }
+
     // Tao CareerPath
     const careerPath = await db.CareerPath.create({
       title: data.title,
@@ -144,6 +159,21 @@ class CareerPathService {
           parsedSkills = [];
         }
       }
+    }
+
+    // Chuan hoa: trim + loai bo trung lap khong phan biet hoa thuong
+    if (parsedSkills !== undefined && parsedSkills !== null && parsedSkills.length > 0) {
+      const seen = new Set();
+      parsedSkills = parsedSkills.filter((skill) => {
+        const lower = skill.trim().toLowerCase();
+        if (seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      }).map((skill) => skill.trim());
+    }
+
+    if (parsedSkills !== undefined && (!Array.isArray(parsedSkills) || parsedSkills.length === 0)) {
+      throw new Error("Bắt buộc phải có ít nhất 1 kỹ năng cốt lõi");
     }
 
     await course.update({

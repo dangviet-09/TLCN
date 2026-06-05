@@ -338,12 +338,54 @@ const CompanyCourseManage: React.FC = () => {
             </Form.Item>
           </div>
 
-          <Form.Item name="skills" label="Kỹ năng cốt lõi">
+          <Form.Item
+            name="skills"
+            label="Kỹ năng cốt lõi"
+            rules={[{ required: true, message: "Bắt buộc nhập ít nhất 1 kỹ năng!" }]}
+            normalize={(value: any, prevValue: any) => {
+              if (!value) return [];
+              const arrayValue = Array.isArray(value) ? value : [value];
+
+              const seen = new Set<string>();
+              const newValue = arrayValue.filter((item) => {
+                if (typeof item !== 'string') return false;
+                const cleanItem = item.trim();
+                const lower = cleanItem.toLowerCase();
+                if (!lower || seen.has(lower)) return false;
+                seen.add(lower);
+                return true;
+              }).map((item) => item.trim());
+
+              // Chong crash Ant Design: Giu nguyen tham chieu bo nho neu mang khong thay doi
+              const prev = Array.isArray(prevValue) ? prevValue : [];
+              if (prev.length === newValue.length && prev.every((val, i) => val === newValue[i])) {
+                return prev;
+              }
+              return newValue;
+            }}
+          >
             <Select
               mode="tags"
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               placeholder="Nhập kỹ năng và ấn Enter (VD: ReactJS, NodeJS)..."
-              tokenSeparators={[',']}
+              tokenSeparators={[","]}
+              onInputKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const inputElement = e.currentTarget as HTMLInputElement;
+                  const inputValue = inputElement.value.trim().toLowerCase();
+                  const currentSkills = form.getFieldValue('skills') || [];
+
+                  if (currentSkills.some((skill: string) => skill.trim().toLowerCase() === inputValue)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Xoa text hien thi tren o input de tranh bi ket chu
+                    inputElement.value = '';
+                    const event = new Event('input', { bubbles: true });
+                    inputElement.dispatchEvent(event);
+                  }
+                }
+              }}
             />
           </Form.Item>
 

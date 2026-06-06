@@ -808,80 +808,85 @@ Hãy viết báo cáo bằng tiếng Việt, chi tiết, cụ thể và mang tí
   // Real AI Grading (gọi Groq API)
   // ==============================
 
+  // ==============================
+  // Real AI Grading (gọi Groq API - Bọc thép JSON Mode)
+  // ==============================
+
   async gradeLessonTask(submissionData, rubric, submissionFields) {
     try {
-      const systemPrompt = `Bạn là một giám khảo chấm thi CNTT cực kỳ nghiêm khắc. Hãy chấm điểm bài làm của học viên dựa trên Đề bài và Rubric.
+      // 1. DYNAMIC PROMPTING: Dịch cấu hình nộp bài thành chỉ thị cho AI
+      let dynamicInstructions = "";
+      if (submissionFields && Array.isArray(submissionFields) && submissionFields.length > 0) {
+        dynamicInstructions = "HƯỚNG DẪN CHẤM TỪNG TRƯỜNG DỮ LIỆU:\n";
+        submissionFields.forEach(field => {
+          if (field.type === 'CODE') {
+            dynamicInstructions += `- Trường [${field.label}] (Ngôn ngữ: ${field.language || 'Code'}): Đánh giá cú pháp, logic thuật toán, độ tối ưu (Time/Space Complexity) và clean code.\n`;
+          } else if (field.type === 'SQL_QUERY') {
+            dynamicInstructions += `- Trường [${field.label}] (SQL): Đánh giá tính chính xác của truy vấn, cấu trúc JOIN/WHERE, và tối ưu hiệu suất.\n`;
+          } else {
+            dynamicInstructions += `- Trường [${field.label}] (Văn bản/Giải thích): Đánh giá mức độ hiểu vấn đề, tính logic và đầy đủ của thông tin giải thích.\n`;
+          }
+        });
+      }
 
-QUY TẮC BẮT BUỘC:
-1. BƯỚC 1: Đếm số lượng yêu cầu/câu hỏi trong đề bài. Đếm số lượng câu trả lời của học viên.
-2. BƯỚC 2: NẾU học viên làm thiếu câu, BẮT BUỘC trừ 100% số điểm của câu bị thiếu đó. Không được nhân nhượng. Trừ điểm nặng nếu câu trả lời chung chung, không có giải thích như Rubric yêu cầu.
-3. BƯỚC 3: Nếu bài làm có dấu hiệu sao chép đề bài mà không giải quyết vấn đề, điểm tối đa là 1/10.
-4. Phản hồi (feedback) phải chỉ rõ: Học viên đã làm được gì, thiếu hụt cụ thể phần nào, và tại sao bị trừ điểm.
+      // 2. XÂY DỰNG SYSTEM PROMPT BỌC THÉP
+      const systemPrompt = `Bạn là một Giảng viên Senior IT. Nhiệm vụ của bạn là chấm bài thực hành một cách công tâm, khắt khe và chính xác.
 
-TIÊU CHÍ CHẤM ĐIỂM (rubric):
-${JSON.stringify(rubric, null, 2)}
+QUY TẮC BẮT BUỘC (HARD RULES):
+1. ĐỐI CHIẾU TIÊU CHÍ: Chấm điểm dựa trên "Tiêu chí (Rubric)" và "Bài làm của học viên".
+2. CHẤM THIẾU YÊU CẦU: Nếu học viên để trống hoặc không làm đúng trọng tâm một yêu cầu, bắt buộc trừ điểm. Điểm tối đa là 10.
+3. CHỐNG GIAN LẬN: Nếu bài làm chỉ copy lại đề bài hoặc ghi nội dung vô nghĩa, cho 0 điểm.
+4. ĐỊNH DẠNG TRẢ VỀ: Bạn BẮT BUỘC phải trả về một object JSON. KHÔNG ĐƯỢC PHÉP có bất kỳ văn bản, giải thích, hay markdown (như \`\`\`json) nào nằm ngoài block JSON.
 
-ĐỀ BÀI / YÊU CẦU BÀI TẬP (submissionFields):
-${JSON.stringify(submissionFields, null, 2)}
+${dynamicInstructions}
 
-BÀI LÀM CỦA HỌC SINH:
-${JSON.stringify(submissionData, null, 2)}
+TIÊU CHÍ CHẤM ĐIỂM (Rubric):
+${rubric ? rubric : "Không có Rubric cụ thể. Hãy chấm dựa trên độ chính xác kỹ thuật, logic và best practices."}
 
-QUY TẮC TÍNH ĐIỂM:
-- Bài trống hoặc không liên quan đến đề bài: 0/10
-- Thiếu câu hỏi/yêu cầu: trừ 100% điểm của câu bị thiếu
-- Câu trả lời sơ sài, không đủ chi tiết: trừ 30-60% điểm của câu đó
-- Câu trả lời đầy đủ nhưng thiếu giải thích/bước thực hiện: trừ 20-40%
-- Sao chép đề bài mà không giải quyết: tối đa 1/10
-- Đúng hoàn toàn, có giải thích: 8-10/10 mỗi câu
-
-OUTPUT FORMAT (JSON bắt buộc):
+BẢN THIẾT KẾ JSON OUTPUT (Tuân thủ nghiêm ngặt):
 {
-  "score": <điểm số từ 0-10, kiểu Number>,
-  "feedback": "<nhận xét chung ngắn gọn 1-3 câu, chỉ rõ thiếu hụt cụ thể>",
-  "strengths": ["<điểm mạnh 1>", "<điểm mạnh 2>"],
-  "improvements": ["<điểm cần cải thiện 1>", "<điểm cần cải thiện 2>"]
+  "score": 8.5,
+  "feedback": "Nhận xét tổng quan và chỉ ra lỗi sai cụ thể (ví dụ: Code chạy tốt nhưng vòng lặp chưa tối ưu).",
+  "strengths": ["Ưu điểm 1", "Ưu điểm 2"],
+  "improvements": ["Điểm cần sửa 1", "Điểm cần sửa 2"]
 }`;
 
+      // 3. GỌI API VỚI NATIVE JSON MODE
       const response = await groqClient.post('/chat/completions', {
         model: 'llama-3.3-70b-versatile',
+        response_format: { type: "json_object" }, // Kỹ thuật cốt lõi: Ép API trả về JSON thô
         messages: [
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `Hãy chấm bài thực hành này và trả về kết quả theo format JSON yêu cầu.\n\nBài làm: ${JSON.stringify(submissionData)}\nRubric: ${JSON.stringify(rubric)}\nSubmission Fields: ${JSON.stringify(submissionFields)}`
+            content: `BÀI LÀM CỦA HỌC VIÊN:\n${JSON.stringify(submissionData, null, 2)}\n\nHãy chấm điểm và xuất JSON.`
           }
         ],
-        temperature: 0.3,
-        max_tokens: 2048
+        temperature: 0.2, // Hạ nhiệt để AI bớt sáng tạo, tập trung chấm chính xác
+        max_tokens: 1024
       });
 
+      // 4. BÓC TÁCH DỮ LIỆU AN TOÀN
       const rawContent = response.data.choices[0].message.content;
-
-      // Parse JSON response
       let gradingResult;
+
       try {
-        const jsonMatch = rawContent.match(/```json\n?([\s\S]*?)\n?```/) ||
-          rawContent.match(/```\n?([\s\S]*?)\n?```/) ||
-          rawContent.match(/(\{[\s\S]*\})/);
-        const jsonStr = jsonMatch ? jsonMatch[1] : rawContent;
-        gradingResult = JSON.parse(jsonStr);
+        gradingResult = JSON.parse(rawContent);
       } catch (parseError) {
-        console.error('[AIService.gradeLessonTask] JSON parse error:', parseError, 'Raw content:', rawContent);
-        throw new Error('Lỗi parse kết quả chấm điểm từ AI');
+        console.error('[AIService.gradeLessonTask] JSON parse error:', parseError, 'Raw:', rawContent);
+        throw new Error('Hệ thống AI trả về định dạng lỗi. Vui lòng thử nộp lại.');
       }
 
-      // Validate required fields
-      if (typeof gradingResult.score !== 'number') {
-        gradingResult.score = 0;
-      }
-      gradingResult.feedback = gradingResult.feedback || 'Không có nhận xét';
-      gradingResult.strengths = Array.isArray(gradingResult.strengths) ? gradingResult.strengths : [];
-      gradingResult.improvements = Array.isArray(gradingResult.improvements) ? gradingResult.improvements : [];
+      // 5. CHUẨN HÓA DỮ LIỆU ĐẦU RA CHO FRONTEND
+      return {
+        score: typeof gradingResult.score === 'number' ? gradingResult.score : parseFloat(gradingResult.score) || 0,
+        feedback: gradingResult.feedback || 'Không có nhận xét chi tiết.',
+        strengths: Array.isArray(gradingResult.strengths) ? gradingResult.strengths : [],
+        improvements: Array.isArray(gradingResult.improvements) ? gradingResult.improvements : []
+      };
 
-      return gradingResult;
     } catch (error) {
-      console.error('[AIService.gradeLessonTask] Error:', error);
+      console.error('[AIService.gradeLessonTask] Fatal Error:', error);
       throw error;
     }
   }

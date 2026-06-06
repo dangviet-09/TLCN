@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Form, Input, Button, Card, Tag, Typography, Alert, notification, Progress } from 'antd';
-import { CheckCircleFilled, PlayCircleOutlined, FileTextOutlined, CodeOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, PlayCircleOutlined, FileTextOutlined, CodeOutlined, LockOutlined } from '@ant-design/icons';
 import { apiClient } from '../../services/apiClient';
+import 'react-quill-new/dist/quill.snow.css'; // Môi trường render bắt buộc của Quill
 
 const { Title, Text } = Typography;
 
@@ -65,6 +66,17 @@ const CourseStudyPage: React.FC = () => {
         }
         if (lessonData.submission !== undefined) setSubmission(lessonData.submission);
         setCourse(courseData);
+
+        // Redirect về bài học cao nhất nếu cố tình truy cập URL vượt cấp
+        if (courseData?.lessons && lessonData.progress?.status !== 'COMPLETED') {
+          const maxAllowedIndex = courseData.lessons.findIndex((l: any) => l.id === lessonData.progress.currentLessonId);
+          const requestedIndex = courseData.lessons.findIndex((l: any) => l.id === lessonId);
+          if (requestedIndex > maxAllowedIndex) {
+            notification.warning({ message: "Vui lòng hoàn thành bài học hiện tại trước!" });
+            navigate(`/courses/${courseId}/lessons/${lessonData.progress.currentLessonId}`);
+            return;
+          }
+        }
       } catch (error: any) {
         console.error("Failed to load lesson:", error);
         if (error.response?.status === 400 || error.response?.data?.status === 400) {
@@ -157,6 +169,8 @@ const CourseStudyPage: React.FC = () => {
     ? Math.round((completedLessonIds.length / course.lessons.length) * 100)
     : 0;
 
+  const currentLessonIndex = course?.lessons?.findIndex((l: any) => l.id === progress?.currentLessonId) ?? 0;
+
   return (
     <div className="flex min-h-[calc(100vh-64px)] bg-gray-50">
       {/* Khu vực trái — Sidebar Mục lục */}
@@ -175,15 +189,23 @@ const CourseStudyPage: React.FC = () => {
           {course?.lessons?.map((item: any, index: number) => {
             const isActive = item.id === lessonId;
             const isTheory = item.type === 'THEORY';
+            const isLocked = index > currentLessonIndex && progress?.status !== 'COMPLETED';
+
             return (
               <div
                 key={item.id}
-                onClick={() => navigate(`/courses/${courseId}/lessons/${item.id}`)}
-                className={`flex items-center justify-between p-4 border-b border-gray-200 cursor-pointer transition-all ${isActive ? 'bg-white border-l-4 border-l-blue-600' : 'hover:bg-gray-100 border-l-4 border-l-transparent'}`}
+                onClick={() => {
+                  if (!isLocked) navigate(`/courses/${courseId}/lessons/${item.id}`);
+                }}
+                className={`flex items-center justify-between p-4 border-b border-gray-200 transition-all ${
+                  isLocked ? 'bg-gray-100 cursor-not-allowed opacity-70' :
+                  isActive ? 'bg-white border-l-4 border-l-blue-600 cursor-pointer' :
+                  'hover:bg-gray-50 border-l-4 border-l-transparent cursor-pointer'
+                }`}
               >
                 <div className="flex items-start gap-3 flex-1">
                   <div className={`mt-1 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
-                    {isTheory ? <FileTextOutlined /> : <CodeOutlined />}
+                    {isLocked ? <LockOutlined /> : (isTheory ? <FileTextOutlined /> : <CodeOutlined />)}
                   </div>
                   <div>
                     <p className={`font-medium text-sm m-0 ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>{item.title}</p>
@@ -193,7 +215,7 @@ const CourseStudyPage: React.FC = () => {
                 <div className="text-gray-300">
                   {completedLessonIds.includes(item.id)
                     ? <CheckCircleFilled className="text-green-500 text-lg" />
-                    : <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center"></div>
+                    : (!isLocked && <div className="w-5 h-5 rounded-full border-2 border-gray-300" />)
                   }
                 </div>
               </div>
@@ -211,20 +233,51 @@ const CourseStudyPage: React.FC = () => {
           {/* Theory Content */}
           {lesson.theoryContent && (
             <Card title="Nội dung lý thuyết" className="mb-6">
-              <div
-                dangerouslySetInnerHTML={{ __html: lesson.theoryContent }}
-                className="prose max-w-none whitespace-pre-wrap text-gray-700"
-              />
+              <div className="ql-snow">
+                {/* Bơm CSS bọc thép ép kích thước Video và xóa bỏ class prose */}
+                <style>{`
+                  .ql-editor .ql-video {
+                    width: 100%;
+                    aspect-ratio: 16/9;
+                    height: auto;
+                    border-radius: 8px;
+                    margin: 1.5rem 0;
+                  }
+                  .ql-editor img {
+                    border-radius: 8px;
+                  }
+                `}</style>
+                <div
+                  className="ql-editor text-gray-700"
+                  dangerouslySetInnerHTML={{ __html: lesson.theoryContent }}
+                  style={{ padding: 0 }}
+                />
+              </div>
             </Card>
           )}
 
           {/* Task Description */}
           {lesson.taskDescription && (
             <Card title="Yêu cầu bài tập" className="mb-6">
-              <div
-                dangerouslySetInnerHTML={{ __html: lesson.taskDescription }}
-                className="prose max-w-none whitespace-pre-wrap text-gray-700"
-              />
+              <div className="ql-snow">
+                <style>{`
+                  .ql-editor .ql-video {
+                    width: 100%;
+                    aspect-ratio: 16/9;
+                    height: auto;
+                    border-radius: 8px;
+                    margin: 1.5rem 0;
+                  }
+                  .ql-editor img {
+                    border-radius: 8px;
+                  }
+                `}</style>
+                <div
+                  className="ql-editor text-gray-700"
+                  dangerouslySetInnerHTML={{ __html: lesson.taskDescription }}
+                  style={{ padding: 0 }}
+                />
+              </div>
             </Card>
           )}
 

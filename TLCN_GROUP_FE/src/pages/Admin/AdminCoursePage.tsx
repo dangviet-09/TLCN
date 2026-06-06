@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Table, Tag, Button, Space, Popconfirm, message } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, message, Drawer, Spin, Empty } from "antd";
+import { EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { apiClient } from "../../services/apiClient";
+import "react-quill-new/dist/quill.snow.css"; // Bắt buộc để render HTML Bài học
 
 interface Course {
   id: string;
@@ -29,19 +31,41 @@ const AdminCoursePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0 });
 
+  // State cho Drawer Xem trước
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewCourse, setPreviewCourse] = useState<any>(null);
+
+  const handlePreview = async (courseId: string) => {
+    setPreviewVisible(true);
+    setPreviewLoading(true);
+    setPreviewCourse(null);
+    try {
+      const res = await apiClient.get(`/courses/${courseId}`);
+      // Bóc tách dữ liệu an toàn
+      const data = (res as any).data?.data || (res as any).data || res;
+      setPreviewCourse(data);
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Lỗi tải chi tiết khóa học");
+      setPreviewVisible(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const fetchCourses = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-      const response = await apiClient.get<Course[]>("/courses/admin/courses", {
+      const response = await apiClient.get("/courses/admin/courses", {
         params: { page, limit },
       });
-      const courseList = response?.data?.data || response?.data || [];
+      const courseList = (response as any)?.data?.data || (response as any)?.data || [];
       setCourses(courseList);
       setPagination((prev) => ({
         ...prev,
         page,
         limit,
-        total: response?.data?.total || response?.total || 0,
+        total: (response as any)?.data?.total || (response as any)?.total || 0,
       }));
     } catch (err: any) {
       message.error(err?.response?.data?.message || "Đã xảy ra lỗi");
@@ -135,6 +159,13 @@ const AdminCoursePage: React.FC = () => {
       key: "actions",
       render: (_, record) => (
         <Space>
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handlePreview(record.id)}
+          >
+            Xem
+          </Button>
           {(record.status === "DRAFT" || record.status === "ARCHIVED") && (
             <Button
               type="primary"
@@ -184,6 +215,63 @@ const AdminCoursePage: React.FC = () => {
         }}
         onChange={handleTableChange}
       />
+
+      {/* Drawer Xem trước Khóa học (Read-only) */}
+      <Drawer
+        title={<span className="font-bold text-lg">Xem trước: {previewCourse?.title}</span>}
+        width={850}
+        onClose={() => setPreviewVisible(false)}
+        open={previewVisible}
+        destroyOnClose
+      >
+        {previewLoading ? (
+          <div className="flex justify-center items-center h-40"><Spin size="large" /></div>
+        ) : previewCourse ? (
+          <div className="space-y-6">
+            {/* Thông tin chung */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <p><strong>Danh mục:</strong> {previewCourse.category || "—"}</p>
+              <p><strong>Cấp độ:</strong> {previewCourse.level || "—"}</p>
+              <p><strong>Mô tả:</strong> {previewCourse.description || "—"}</p>
+            </div>
+
+            {/* Danh sách Bài học */}
+            <h3 className="text-xl font-bold border-b pb-2 mt-6">Nội dung Bài học</h3>
+            {previewCourse.lessons && previewCourse.lessons.length > 0 ? (
+              previewCourse.lessons.map((lesson: any, index: number) => (
+                <div key={lesson.id} className="border border-gray-300 rounded-lg p-5 mb-5 shadow-sm">
+                  <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                    Bài {index + 1}: {lesson.title}
+                    <Tag color={lesson.type === 'THEORY' ? 'blue' : 'orange'}>
+                      {lesson.type === 'THEORY' ? 'Lý thuyết' : 'Bài tập'}
+                    </Tag>
+                  </h4>
+
+                  {/* Môi trường render bọc thép của ReactQuill */}
+                  <div className="ql-snow bg-gray-50 p-4 rounded-md">
+                    <div
+                      className="ql-editor p-0 text-gray-800"
+                      dangerouslySetInnerHTML={{
+                        __html: lesson.theoryContent || lesson.taskDescription || '<p class="text-gray-400 italic">Không có nội dung</p>'
+                      }}
+                    />
+                  </div>
+
+                  {/* Hiển thị thêm Rubric nếu là bài tập */}
+                  {lesson.type === 'TASK' && lesson.rubric && (
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <strong className="text-blue-800">Tiêu chí chấm điểm (Rubric):</strong>
+                      <p className="whitespace-pre-wrap mt-1 text-sm">{lesson.rubric}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <Empty description="Khóa học này chưa có bài học nào" />
+            )}
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 };

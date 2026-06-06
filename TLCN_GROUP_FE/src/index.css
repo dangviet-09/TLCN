@@ -18,3 +18,26 @@
     animation: slideDown 0.2s ease-out;
   }
 }
+
+/* --- BỌC THÉP CSS CHO REACT QUILL (GHI ĐÈ TAILWIND) --- */
+.ql-editor .ql-video {
+  width: 100% !important;
+  aspect-ratio: 16/9 !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  margin: 1.5rem 0 !important;
+  display: block !important;
+}
+
+.ql-editor img {
+  border-radius: 8px !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: inline-block !important; /* KHẮC CHẾ TAILWIND ĐỂ CĂN LỀ HOẠT ĐỘNG */
+}
+
+/* Ép buộc ưu tiên tuyệt đối cho các class căn lề của Quill */
+.ql-align-center { text-align: center !important; }
+.ql-align-right { text-align: right !important; }
+.ql-align-left { text-align: left !important; }
+.ql-align-justify { text-align: justify !important; }

@@ -460,11 +460,30 @@ class CourseService {
   // ==============================
   // Hàm mới: Sinh viên nộp bài thực hành (TASK lesson)
   // ==============================
-
   async submitLessonTask(studentId, careerPathId, lessonId, submissionData) {
     const lesson = await db.Lesson.findByPk(lessonId);
     if (!lesson) throw new Error("Lesson không tồn tại");
 
+    // BỌC THÉP 1: Lấy tiến độ và kiểm tra vượt tuyến NGAY TỪ ĐẦU để tiết kiệm tiền gọi OpenAI
+    const progress = await db.StudentProgress.findOne({
+      where: { studentId, careerPathId }
+    });
+    if (!progress) throw new Error("Bạn chưa đăng ký khóa học này");
+
+    const lessons = await db.Lesson.findAll({
+      where: { careerPathId },
+      order: [["order", "ASC"]],
+      attributes: ['id', 'order']
+    });
+
+    const currentIndex = lessons.findIndex(l => l.id === lessonId);
+    const progressIndex = lessons.findIndex(l => l.id === progress.currentLessonId);
+
+    if (currentIndex > progressIndex && progress.status !== 'COMPLETED') {
+      throw new Error("Hành vi không hợp lệ. Bạn phải hoàn thành các bài học trước đó mới được nộp bài này.");
+    }
+
+    // Chỉ gọi AI chấm điểm khi đã qua cửa kiểm duyệt
     const rubric = lesson.rubric;
     const aiService = require('./aiService');
     const aiResult = await aiService.gradeLessonTask(submissionData, rubric, lesson.submissionFields);
@@ -484,30 +503,18 @@ class CourseService {
     // --- XỬ LÝ TIẾN ĐỘ & CỘNG ĐIỂM THEO TRỌNG SỐ ---
     // Tiêu chí Pass: Điểm >= 3
     if (aiResult.score >= 3) {
-      const progress = await db.StudentProgress.findOne({
-        where: { studentId, careerPathId }
-      });
-
-      if (progress) {
-        const lessons = await db.Lesson.findAll({
-          where: { careerPathId },
-          order: [["order", "ASC"]],
-          attributes: ['id', 'order']
-        });
-
-        const currentIndex = lessons.findIndex(l => l.id === lessonId);
+      // BỌC THÉP 2: Chỉ đẩy tiến độ lên nếu học sinh đang nộp đúng bài hiện tại
+      if (currentIndex === progressIndex && progress.status !== 'COMPLETED') {
         const nextLesson = lessons[currentIndex + 1] || null;
 
         await progress.update({
-          status: 'IN_PROGRESS',
+          status: nextLesson ? 'IN_PROGRESS' : 'COMPLETED',
           lastCompletedLessonId: lessonId,
           currentLessonId: nextLesson ? nextLesson.id : progress.currentLessonId
         });
 
         // Nếu là bài học cuối cùng -> Hoàn thành khóa học
         if (!nextLesson) {
-          await progress.update({ status: 'COMPLETED' });
-
           const course = await db.CareerPath.findByPk(careerPathId);
           if (course && course.skills && course.skills.length > 0) {
             // Trọng số: Làm tròn điểm AI chấm để đẩy vào cột INT của DB (VD: 8.5đ -> 9 điểm)

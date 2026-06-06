@@ -19,6 +19,8 @@ const vectorRouter = require('./vectorRoute');
 const courseRouter = require('./courseRoute');
 const jobRouter = require('./jobRoute');
 
+const uploadRouter = require('./uploadRoute');
+
 function route(app) {
     // Health check endpoint for Docker
     app.get("/health", (req, res) => {
@@ -49,6 +51,7 @@ function route(app) {
     app.use("/vector", vectorRouter);
     app.use("/courses", courseRouter);
     app.use("/jobs", jobRouter);
+    app.use("/upload", uploadRouter);
 }
 
 module.exports = route;

@@ -3,27 +3,10 @@ const Sequelize = require("sequelize");
 const bcrypt = require("bcryptjs");
 
 const seedData = async () => {
-  let sequelizeForDB = null;
   let db = null;
 
   try {
-    console.log("🌱 Bắt đầu seed dữ liệu...");
-
-    console.log("\n🗄️ Tạo Database nếu chưa có...");
-    sequelizeForDB = new Sequelize({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      username: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      dialect: "mysql",
-      logging: false,
-    });
-
-    await sequelizeForDB.query(
-      `CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME}\``
-    );
-    await sequelizeForDB.close();
-    console.log(`✅ Database ${process.env.DB_NAME} tạo/tồn tại thành công`);
+    console.log("🌱 Bắt đầu seed dữ liệu vào Supabase...");
 
     console.log("\n🔗 Kết nối đến database...");
     db = require("../src/models");
@@ -69,7 +52,7 @@ const seedData = async () => {
     console.log("✅ Users và AuthProvider created");
 
     console.log("\n👨‍🎓 Tạo Student Profile...");
-    await db.Student.create({
+    const studentProfile = await db.Student.create({
       userId: studentUser.id,
       major: "Computer Science",
       school: "University of Technology",
@@ -127,6 +110,30 @@ const seedData = async () => {
     });
     console.log("✅ CareerPath, Lessons, Test created");
 
+    console.log("\n💼 Tạo Job Posting & Skills...");
+    await db.JobPosting.create({
+      companyId: company.id,
+      title: "Backend Developer (Node.js)",
+      status: "OPEN",
+      skillRequirements: [
+        { skillName: "Node.js", level: "REQUIRED", minProficiency: 3 },
+        { skillName: "React", level: "NICE_TO_HAVE", minProficiency: 2 }
+      ],
+      salaryMin: 15000000,
+      salaryMax: 30000000,
+      location: "Hồ Chí Minh, Việt Nam",
+      employmentType: "FULL_TIME",
+      experienceLevel: "JUNIOR",
+      description: "Chúng tôi đang tìm kiếm một Backend Developer tham gia phát triển hệ thống lõi..."
+    });
+
+    await db.StudentSkill.create({
+      studentId: studentProfile.id,
+      skillName: "Node.js",
+      score: 3
+    });
+    console.log("✅ Job Posting và Skills created");
+
     console.log("\n📝 Tạo Blogs + Comment + Like...");
     const blog1 = await db.Blog.create({
       content: "Welcome to Web Development. This is a sample blog post.",
@@ -161,10 +168,9 @@ const seedData = async () => {
 
     await db.sequelize.close();
     process.exit(0);
-  } catch (error) {
+ } catch (error) {
     console.error("❌ Lỗi khi seed dữ liệu:", error.message);
     if (db && db.sequelize) await db.sequelize.close().catch(() => {});
-    if (sequelizeForDB) await sequelizeForDB.close().catch(() => {});
     process.exit(1);
   }
 };

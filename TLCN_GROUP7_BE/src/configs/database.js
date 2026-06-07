@@ -3,20 +3,14 @@ const { Sequelize } = require("sequelize");
 require("dotenv").config();
 
 const sequelize = new Sequelize(
-  process.env.DB_NAME,     
-  process.env.DB_USER,     
-  process.env.DB_PASSWORD, 
+  process.env.DB_NAME,     // database name
+  process.env.DB_USER,     // username
+  process.env.DB_PASSWORD, // password
   {
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 5432,
-    dialect: "postgres", // Ép kiểu Postgres
+    port: process.env.DB_PORT || 3306,
+    dialect: "mysql",
     logging: false,         
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false // Bọc thép: Vượt rào bảo mật Supabase
-      }
-    },
     pool: {
       max: 5,       
       min: 0,        

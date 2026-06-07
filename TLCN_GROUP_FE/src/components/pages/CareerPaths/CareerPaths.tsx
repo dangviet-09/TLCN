@@ -220,7 +220,12 @@ const CareerPathsPage: React.FC = () => {
                         {/* Nút Duy nhất cho tất cả các Role */}
                         <Button
                           variant="unstyled"
-                          onClick={() => navigate(`/career-tests/${test.id}/take?mode=preview`)}
+                          onClick={() => {
+                            const targetUrl = user?.role === 'STUDENT'
+                              ? `/career-tests/${test.id}/take`
+                              : `/career-tests/${test.id}/take?mode=preview`;
+                            navigate(targetUrl);
+                          }}
                           className={`flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
                             user?.role === 'STUDENT'
                               ? 'bg-green-600 text-white hover:bg-green-700'
